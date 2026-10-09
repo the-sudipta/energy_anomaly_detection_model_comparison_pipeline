@@ -1,17 +1,21 @@
-"""Compact, data-driven summaries of fitted models for the live 3D view.
+"""Exact, replayable traces of fitted models on real readings for the 3D view.
 
-For a finished (split, model) run this loads the saved model bundle and a small
-stratified sample of that split's real test readings, then extracts exactly
-what the animations show:
+For a finished (split, model) run this loads the saved model bundle and a
+seeded sample of that split's real test readings (half true anomalies), then
+records exactly what the model computes for each reading:
 
-* decision_tree    - the real top levels of the fitted tree and the real
-                     decision paths of the sample readings.
-* random_forest    - per-tree votes of nine real trees and the forest score.
-* isolation_forest - PCA positions, real scores and average isolation path
-                     lengths of real readings.
-* xgboost          - real test log-loss after increasing numbers of rounds.
+* decision_tree    - every question on the reading's real root-to-leaf path
+                     (feature, threshold, the reading's value, direction) and
+                     the leaf score.
+* random_forest    - for nine real trees: the reading's path depth, the root
+                     question and the tree's vote; plus the full-forest score.
+* isolation_forest - the reading's real path through one isolation tree (each
+                     random cut and which sample readings survive it), its
+                     average path length over all trees and the score.
+* xgboost          - the reading's log-odds after 1, 2, 5, ... 400 trees.
 
-Results are cached as JSON in ``outputs/digests`` so each run is summarised once.
+Each reading also carries its real (imputed) feature values for hover.
+Results are cached as JSON in ``outputs/digests``.
 """
 
 from __future__ import annotations
@@ -30,11 +34,12 @@ import pyarrow.parquet as pq
 
 ROOT = Path(__file__).resolve().parents[1]
 DIGEST_DIR = ROOT / "outputs" / "digests"
-SAMPLE_PER_CLASS = 20
-IF_CLOUD = 300
-DT_DEPTH = 4
+DIGEST_VERSION = 2
+SAMPLE_PER_CLASS = 12
+IF_CLOUD = 180
 RF_TREES = 9
-XGB_ROUNDS = (1, 5, 10, 25, 50, 100, 200, 400)
+SHOW_FEATURES = 8
+XGB_ROUNDS = (1, 2, 5, 10, 25, 50, 100, 200, 400)
 HEAVY_MODEL_BYTES = 50_000_000
 MIN_FREE_BYTES = 600_000_000
 
@@ -62,7 +67,7 @@ def free_memory_bytes() -> int | None:
 
 
 def can_build(model_path: Path, training_active: bool) -> tuple[bool, str]:
-    """Decide whether building a digest now is safe for the running pipeline.
+    """Decide whether building a trace now is safe for the running pipeline.
 
     Args:
         model_path: Saved model bundle.
@@ -72,7 +77,7 @@ def can_build(model_path: Path, training_active: bool) -> tuple[bool, str]:
         ``(allowed, reason_if_not)``.
     """
     if training_active and model_path.stat().st_size > HEAVY_MODEL_BYTES:
-        return False, "Large model: summarised once training has finished, to keep memory free."
+        return False, "This forest is ~100 MB; it is loaded once training finishes so the pipeline keeps its memory."
     free = free_memory_bytes()
     if training_active and free is not None and free < MIN_FREE_BYTES:
         return False, f"Waiting for free memory ({free / 1e9:.1f} GB free) so the pipeline is not slowed."
@@ -80,38 +85,39 @@ def can_build(model_path: Path, training_active: bool) -> tuple[bool, str]:
 
 
 def digest_path(run_id: str) -> Path:
-    """Return the cache file of a run's digest."""
+    """Return the cache file of a run's trace."""
     return DIGEST_DIR / f"{run_id}.json"
 
 
 def build_digest(split: str, model: str, signature: str | None) -> dict[str, Any]:
-    """Build and cache the digest of one finished run.
+    """Build and cache the trace of one finished run.
 
     Args:
         split: Split name.
         model: Model name.
-        signature: Split signature stored with the run's metrics, kept for cache validation.
+        signature: Split signature stored with the run's metrics.
 
     Returns:
-        The digest dictionary.
+        The trace dictionary.
     """
     run_id = f"{split}__{model}"
     bundle = joblib.load(ROOT / "outputs" / "models" / f"{run_id}.joblib")
     features, X, y = _sample(split, model, bundle["imputer"])
-    estimator = bundle["model"].estimator
+    wrapper = bundle["model"]
     builders = {"decision_tree": _decision_tree, "random_forest": _random_forest,
                 "isolation_forest": _isolation_forest, "xgboost": _xgboost}
-    digest = builders[model](estimator, bundle["model"], features, X, y)
-    digest.update(run=run_id, split=split, model=model, signature=signature)
+    digest = builders[model](wrapper.estimator, wrapper, features, X, y)
+    digest.update(run=run_id, split=split, model=model, signature=signature, version=DIGEST_VERSION)
     DIGEST_DIR.mkdir(parents=True, exist_ok=True)
     digest_path(run_id).write_text(json.dumps(digest), encoding="utf-8")
     return digest
 
 
 def _sample(split: str, model: str, imputer: Any) -> tuple[list[str], np.ndarray, np.ndarray]:
-    """Draw a seeded sample of real test readings and impute them like the run did.
+    """Draw a seeded sample of real test readings and impute them exactly like the run.
 
-    Isolation Forest gets a larger mostly-normal cloud plus the stratified sample.
+    The first ``2 * SAMPLE_PER_CLASS`` rows alternate anomalies and normal
+    readings; Isolation Forest additionally gets a random cloud of test rows.
 
     Args:
         split: Split name.
@@ -123,25 +129,23 @@ def _sample(split: str, model: str, imputer: Any) -> tuple[list[str], np.ndarray
     """
     meta = json.loads((ROOT / "data" / "processed" / "dataset_meta.json").read_text(encoding="utf-8"))
     features = meta["feature_columns"]
+    dataset = ROOT / "data" / "processed" / "dataset.parquet"
     with np.load(ROOT / "data" / "processed" / "splits" / f"{split}.npz") as bundle:
         test_idx = bundle["test_idx"]
-    y_all = pq.read_table(ROOT / "data" / "processed" / "dataset.parquet", columns=["anomaly"])
-    y_test = y_all.column("anomaly").to_numpy()[test_idx]
+    y_test = pq.read_table(dataset, columns=["anomaly"]).column("anomaly").to_numpy()[test_idx]
     rng = np.random.default_rng(42)
-    pos, neg = test_idx[y_test == 1], test_idx[y_test == 0]
-    pick = [rng.choice(pos, min(SAMPLE_PER_CLASS, len(pos)), replace=False),
-            rng.choice(neg, min(SAMPLE_PER_CLASS, len(neg)), replace=False)]
+    pos = rng.choice(test_idx[y_test == 1], SAMPLE_PER_CLASS, replace=False)
+    neg = rng.choice(test_idx[y_test == 0], SAMPLE_PER_CLASS, replace=False)
+    head = np.empty(2 * SAMPLE_PER_CLASS, dtype=np.int64)
+    head[0::2], head[1::2] = pos, neg
+    rows = [head]
     if model == "isolation_forest":
-        pick.append(rng.choice(test_idx, min(IF_CLOUD, len(test_idx)), replace=False))
-    rows = np.concatenate(pick)
-    frame = _read_rows(ROOT / "data" / "processed" / "dataset.parquet", rows, [*features, "anomaly"])
+        rest = np.setdiff1d(test_idx, head)
+        rows.append(rng.choice(rest, IF_CLOUD, replace=False))
+    rows_all = np.concatenate(rows)
+    frame = _read_rows(dataset, rows_all, [*features, "anomaly"])
     y = frame.pop("anomaly").to_numpy().astype(int)
-    X = imputer.transform(frame).astype(np.float32)
-    order = np.arange(len(y))
-    head = order[: 2 * SAMPLE_PER_CLASS]
-    rng.shuffle(head)
-    order[: len(head)] = head
-    return features, X[order], y[order]
+    return features, imputer.transform(frame).astype(np.float32), y
 
 
 def _read_rows(path: Path, rows: np.ndarray, columns: list[str]) -> pd.DataFrame:
@@ -168,50 +172,47 @@ def _read_rows(path: Path, rows: np.ndarray, columns: list[str]) -> pd.DataFrame
     return frame.loc[rows].reset_index(drop=True)
 
 
-def _decision_tree(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.ndarray) -> dict[str, Any]:
-    """Real top levels of the tree and real root-to-leaf paths.
+def _values(x: np.ndarray, columns: list[int], features: list[str]) -> dict[str, float]:
+    """Real feature values of one reading for the hover panel.
 
     Args:
-        est: Fitted DecisionTreeClassifier.
-        wrapper: Model wrapper.
+        x: One imputed feature row.
+        columns: Feature positions to include.
         features: Feature names.
-        X: Sample features.
-        y: Sample labels.
 
     Returns:
-        Digest with ``nodes`` (heap-indexed, depth < DT_DEPTH) and ``samples``.
+        Mapping of feature name to rounded value.
     """
-    tree = est.tree_
-    nodes, heap = {}, {0: 0}
-    queue = [(0, 0)]
-    while queue:
-        node, slot = queue.pop(0)
-        depth = int(math.log2(slot + 1))
-        leaf = tree.children_left[node] == -1
-        nodes[slot] = {"slot": slot, "depth": depth, "leaf": bool(leaf or depth == DT_DEPTH - 1),
-                       "feature": None if leaf else features[tree.feature[node]],
-                       "threshold": None if leaf else float(tree.threshold[node]),
-                       "samples": int(tree.n_node_samples[node]), "anomaly_share": _share(tree.value[node])}
-        if not leaf and depth < DT_DEPTH - 1:
-            for child, cs in ((tree.children_left[node], 2 * slot + 1), (tree.children_right[node], 2 * slot + 2)):
-                heap[cs] = int(child)
-                queue.append((int(child), cs))
-    path = est.decision_path(X)
-    scores = wrapper.predict_score(X)
-    samples = []
-    for i in range(len(y)):
-        visited = set(path.indices[path.indptr[i]:path.indptr[i + 1]].tolist())
-        slots = [0]
-        while len(slots) < DT_DEPTH:
-            last = slots[-1]
-            nxt = [s for s in (2 * last + 1, 2 * last + 2) if s in heap and heap[s] in visited]
-            if not nxt:
-                break
-            slots.append(nxt[0])
-        samples.append({"path": slots, "truth": int(y[i]), "score": float(scores[i]),
-                        "depth": int(len(visited) - 1)})
-    return {"kind": "decision_tree", "nodes": list(nodes.values()), "samples": samples[: 2 * SAMPLE_PER_CLASS],
-            "tree_depth": int(est.get_depth()), "n_leaves": int(est.get_n_leaves())}
+    return {features[j]: round(float(x[j]), 4) for j in columns}
+
+
+def _path_steps(tree: Any, node_ids: list[int], x: np.ndarray, features: list[str],
+                columns: np.ndarray | None = None) -> list[dict[str, Any]]:
+    """Turn a decision path into the questions asked and the answers given.
+
+    Args:
+        tree: A fitted sklearn ``tree_`` object.
+        node_ids: Node ids on the path, root first.
+        x: The reading's features in the tree's own column order.
+        features: Feature names.
+        columns: Mapping from the tree's columns to ``features`` (Isolation Forest).
+
+    Returns:
+        One step per internal node: feature, threshold, value and direction.
+    """
+    steps = []
+    for node, nxt in zip(node_ids[:-1], node_ids[1:]):
+        col = int(tree.feature[node])
+        name = features[int(columns[col])] if columns is not None else features[col]
+        steps.append({"f": name, "t": round(float(tree.threshold[node]), 4), "v": round(float(x[col]), 4),
+                      "left": bool(nxt == tree.children_left[node]), "n": int(tree.n_node_samples[node])})
+    return steps
+
+
+def _node_path(est: Any, x: np.ndarray) -> list[int]:
+    """Return the node ids visited by one reading, root first."""
+    path = est.decision_path(x.reshape(1, -1))
+    return sorted(path.indices.tolist())
 
 
 def _share(value: np.ndarray) -> float:
@@ -221,8 +222,50 @@ def _share(value: np.ndarray) -> float:
     return float(counts[1] / total) if total and len(counts) > 1 else 0.0
 
 
+def _top(importances: np.ndarray) -> list[int]:
+    """Indices of the most important features."""
+    return [int(j) for j in np.argsort(importances)[::-1][:SHOW_FEATURES]]
+
+
+def _decision_tree(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.ndarray) -> dict[str, Any]:
+    """Full real root-to-leaf question sequence for every sample reading.
+
+    Args:
+        est: Fitted DecisionTreeClassifier.
+        wrapper: Model wrapper.
+        features: Feature names.
+        X: Sample features.
+        y: Sample labels.
+
+    Returns:
+        Trace with the top three tree levels and one path per reading.
+    """
+    tree, show = est.tree_, _top(est.feature_importances_)
+    top_nodes, frontier = [], [(0, 0)]
+    while frontier:
+        node, slot = frontier.pop(0)
+        depth = int(math.log2(slot + 1))
+        leaf = tree.children_left[node] == -1
+        top_nodes.append({"slot": slot, "depth": depth, "leaf": bool(leaf),
+                          "f": None if leaf else features[tree.feature[node]],
+                          "t": None if leaf else round(float(tree.threshold[node]), 4),
+                          "n": int(tree.n_node_samples[node]), "share": _share(tree.value[node])})
+        if not leaf and depth < 2:
+            frontier += [(int(tree.children_left[node]), 2 * slot + 1), (int(tree.children_right[node]), 2 * slot + 2)]
+    scores = wrapper.predict_score(X)
+    samples = []
+    for i in range(len(y)):
+        nodes = _node_path(est, X[i])
+        leaf = nodes[-1]
+        samples.append({"truth": int(y[i]), "score": float(scores[i]), "values": _values(X[i], show, features),
+                        "steps": _path_steps(tree, nodes, X[i], features),
+                        "leaf": {"n": int(tree.n_node_samples[leaf]), "share": _share(tree.value[leaf])}})
+    return {"kind": "decision_tree", "top": top_nodes, "samples": samples,
+            "tree_depth": int(est.get_depth()), "n_leaves": int(est.get_n_leaves())}
+
+
 def _random_forest(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.ndarray) -> dict[str, Any]:
-    """Real votes of nine trees and the full-forest score for each sample reading.
+    """Per-tree real path depth, root question and vote for each sample reading.
 
     Args:
         est: Fitted RandomForestClassifier.
@@ -232,50 +275,80 @@ def _random_forest(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y
         y: Sample labels.
 
     Returns:
-        Digest with ``trees`` (depth, leaves) and per-sample ``votes``.
+        Trace with nine trees and per-reading votes.
     """
-    trees = est.estimators_[:RF_TREES]
-    votes = np.stack([t.predict_proba(X)[:, 1] for t in trees], axis=1)
+    trees, show = est.estimators_[:RF_TREES], _top(est.feature_importances_)
     forest = wrapper.predict_score(X)
-    top = np.argsort(est.feature_importances_)[::-1][:5]
-    return {"kind": "random_forest", "n_trees": len(est.estimators_),
-            "trees": [{"depth": int(t.get_depth()), "leaves": int(t.get_n_leaves())} for t in trees],
-            "samples": [{"votes": [round(float(v), 3) for v in votes[i]], "score": float(forest[i]),
-                         "truth": int(y[i])} for i in range(len(y))],
-            "top_features": [{"name": features[j], "importance": float(est.feature_importances_[j])} for j in top]}
+    info = [{"depth": int(t.get_depth()), "leaves": int(t.get_n_leaves()),
+             "root": {"f": features[t.tree_.feature[0]], "t": round(float(t.tree_.threshold[0]), 4)}} for t in trees]
+    samples = []
+    for i in range(len(y)):
+        per_tree = []
+        for t in trees:
+            nodes = _node_path(t, X[i])
+            steps = _path_steps(t.tree_, nodes, X[i], features)
+            per_tree.append({"vote": round(float(t.predict_proba(X[i:i + 1])[0, -1] if t.n_classes_ > 1 else 0.0), 3),
+                             "depth": len(steps), "first": steps[:3]})
+        samples.append({"truth": int(y[i]), "score": float(forest[i]), "values": _values(X[i], show, features),
+                        "trees": per_tree})
+    return {"kind": "random_forest", "n_trees": len(est.estimators_), "trees": info, "samples": samples,
+            "top_features": [features[j] for j in show[:5]]}
 
 
 def _isolation_forest(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.ndarray) -> dict[str, Any]:
-    """PCA positions, real scores and average path lengths of real readings.
+    """Real cut-by-cut isolation of each sample reading in one isolation tree.
+
+    For every cut on the reading's path, records which displayed readings are
+    still on the same side, so the shrinking cloud is exact.
 
     Args:
         est: Fitted IsolationForest.
         wrapper: Model wrapper.
         features: Feature names.
-        X: Sample features (stratified head plus a random cloud).
+        X: Sample features (stratified head followed by a random cloud).
         y: Sample labels.
 
     Returns:
-        Digest with ``points`` and the model's decision threshold.
+        Trace with point positions and one isolation path per sample reading.
     """
     raw = est.score_samples(X)
     psi = int(est.max_samples_)
     c = 2 * (math.log(psi - 1) + 0.5772156649) - 2 * (psi - 1) / psi
-    depth = -np.log2(-raw) * c
+    avg_depth = -np.log2(-raw) * c
     Z = (X - X.mean(0)) / (X.std(0) + 1e-9)
     _, _, vt = np.linalg.svd(Z - Z.mean(0), full_matrices=False)
     P = Z @ vt[:3].T
     P = P / (np.abs(P).max(0) + 1e-9)
+    tree, cols = est.estimators_[0], est.estimators_features_[0]
+    Xt = X[:, cols]
+    leaf_of_all = tree.apply(Xt)
     pred = wrapper.predict(X)
+    head = 2 * SAMPLE_PER_CLASS
+    samples = []
+    for i in range(head):
+        nodes = _node_path(tree, Xt[i])
+        steps = _path_steps(tree.tree_, nodes, Xt[i], features, cols)
+        alive = np.arange(len(X))
+        for step, node in zip(steps, nodes[:-1]):
+            col = int(tree.tree_.feature[node])
+            keep = (Xt[alive, col] <= tree.tree_.threshold[node]) == step["left"]
+            alive = alive[keep]
+            step["alive"] = alive.tolist() if len(alive) <= 60 else len(alive)
+        used = sorted({features.index(s["f"]) for s in steps} | {features.index("log_meter_reading")}
+                      if "log_meter_reading" in features else {features.index(s["f"]) for s in steps})
+        samples.append({"i": i, "truth": int(y[i]), "score": float(-raw[i]), "pred": int(pred[i]),
+                        "avg_depth": round(float(avg_depth[i]), 2), "steps": steps,
+                        "shared_leaf": int(np.sum(leaf_of_all == leaf_of_all[i]) - 1),
+                        "values": _values(X[i], used[:SHOW_FEATURES], features)})
     return {"kind": "isolation_forest", "threshold": float(wrapper.threshold), "max_samples": psi,
-            "points": [{"p": [round(float(v), 4) for v in P[i]], "score": float(-raw[i]),
-                        "depth": round(float(depth[i]), 2), "truth": int(y[i]), "pred": int(pred[i])}
+            "n_trees": len(est.estimators_),
+            "points": [{"p": [round(float(v), 4) for v in P[i]], "truth": int(y[i]), "score": round(float(-raw[i]), 4)}
                        for i in range(len(y))],
-            "highlight": list(range(2 * SAMPLE_PER_CLASS))}
+            "samples": samples}
 
 
 def _xgboost(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.ndarray) -> dict[str, Any]:
-    """Real test log-loss and anomaly recall after increasing numbers of boosting rounds.
+    """Each reading's real log-odds after increasing numbers of boosted trees.
 
     Args:
         est: Fitted XGBClassifier.
@@ -285,39 +358,39 @@ def _xgboost(est: Any, wrapper: Any, features: list[str], X: np.ndarray, y: np.n
         y: Sample labels.
 
     Returns:
-        Digest with one entry per checkpoint round.
+        Trace with checkpoint rounds and one margin trajectory per reading.
     """
     total = int(est.get_booster().num_boosted_rounds())
     rounds = [r for r in XGB_ROUNDS if r <= total] or [total]
-    curve = []
-    for r in rounds:
-        proba = np.clip(est.predict_proba(X, iteration_range=(0, r))[:, 1], 1e-7, 1 - 1e-7)
-        loss = float(-np.mean(y * np.log(proba) + (1 - y) * np.log(1 - proba)))
-        curve.append({"round": r, "logloss": loss, "anomaly_mean": float(proba[y == 1].mean()),
-                      "normal_mean": float(proba[y == 0].mean())})
+    margins = np.stack([est.predict(X, iteration_range=(0, r), output_margin=True) for r in rounds], axis=1)
     gains = est.get_booster().get_score(importance_type="gain")
-    named = sorted(((features[int(k[1:])] if k.startswith("f") and k[1:].isdigit() else k, v)
-                    for k, v in gains.items()), key=lambda kv: -kv[1])[:5]
-    return {"kind": "xgboost", "rounds_total": total, "curve": curve,
-            "top_features": [{"name": n, "gain": float(g)} for n, g in named],
-            "scale_pos_weight": float(getattr(wrapper, "scale_pos_weight", 1.0))}
+    ranked = sorted(gains.items(), key=lambda kv: -kv[1])
+    show = [int(k[1:]) for k, _ in ranked if k.startswith("f") and k[1:].isdigit()][:SHOW_FEATURES]
+    named = [features[j] for j in show[:5]] if show else [k for k, _ in ranked[:5]]
+    proba = 1 / (1 + np.exp(-margins[:, -1]))
+    return {"kind": "xgboost", "rounds": rounds, "rounds_total": total, "learning_rate": float(est.learning_rate or 0.3),
+            "scale_pos_weight": float(getattr(wrapper, "scale_pos_weight", 1.0)), "top_features": named,
+            "samples": [{"truth": int(y[i]), "margins": [round(float(m), 4) for m in margins[i]],
+                         "score": float(proba[i]), "values": _values(X[i], show, features) if show else {}}
+                        for i in range(len(y))]}
 
 
 def load_cached(run_id: str, signature: str | None) -> dict[str, Any] | None:
-    """Return a cached digest if it belongs to the same split signature.
+    """Return a cached trace if it matches the run's split and the current format.
 
     Args:
         run_id: Run identifier.
         signature: Current split signature of the run.
 
     Returns:
-        The digest or None.
+        The trace or None.
     """
     path = digest_path(run_id)
     if not path.is_file():
         return None
     digest = json.loads(path.read_text(encoding="utf-8"))
-    return digest if digest.get("signature") == signature else None
+    ok = digest.get("signature") == signature and digest.get("version") == DIGEST_VERSION
+    return digest if ok else None
 
 
 def run_signature(run_id: str) -> str | None:
@@ -333,4 +406,3 @@ def run_signature(run_id: str) -> str | None:
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8")).get("signature")
-

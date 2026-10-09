@@ -457,8 +457,14 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     """Start the server on localhost and open the browser."""
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://127.0.0.1:{PORT}"
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        print(f"A monitor is already running at {url}; opening it.")
+        if "--no-browser" not in sys.argv:
+            webbrowser.open(url)
+        return
     print(f"Live monitor running at {url}  (Ctrl+C to stop)")
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
