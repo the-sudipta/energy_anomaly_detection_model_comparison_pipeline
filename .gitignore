@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Environments
+.venv/
+venv/
+
+# Data and generated outputs
+data/
+outputs/
+
+# Secrets
+config/kaggle.json
+kaggle.json
+.env
+
+# Local notes and specs
+docs/
+CLAUDE.md
+.claude/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
