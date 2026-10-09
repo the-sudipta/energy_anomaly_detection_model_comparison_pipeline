@@ -23,14 +23,14 @@ self-contained `outputs/REPORT.html`.
 2. Set up Kaggle access (see below).
 3. Double-click **`run.bat`**, or from a terminal in the project folder:
    - Command Prompt: `run.bat`
-   - PowerShell: `.un.bat` (PowerShell does not run scripts from the current folder without `.\`)
+   - PowerShell: `.\run.bat` (PowerShell does not run scripts from the current folder without `.\`)
 
 `run.bat` creates a virtual environment in `.venv`, installs the requirements,
 downloads the data, runs all seven stages and opens the report in your browser.
 A quick trial on a 5% stratified sample:
 
 ```powershell
-.un.bat --sample 0.05
+.\run.bat --sample 0.05
 ```
 
 On other platforms:
@@ -139,7 +139,7 @@ outputs/logs/                    one log file per invocation
 |---|---|
 | `403 Forbidden` during download | Accept the competition rules once on Kaggle, then rerun. |
 | `No Kaggle credentials found` | See *Kaggle credentials*. Check the token file has no `.txt` extension (Explorer hides it). |
-| `'run.bat' is not recognized` in PowerShell | Use `.un.bat` (same for `.un_stage.bat`). |
+| `'run.bat' is not recognized` in PowerShell | Use `.\run.bat` (same for `.\run_stage.bat`). |
 | `Python was not found` | Install Python 3.10+ with *Add to PATH*, then reopen the terminal. |
 | Out of memory | Run with `--sample 0.2` (or smaller), or close other programs. The full data needs roughly 4–6 GB of RAM. |
 | Stale results after changing settings | Rerun the affected stages with `--force`. |
