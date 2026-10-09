@@ -93,7 +93,7 @@ tuning:
   n_iter:
     random_forest: 8
     isolation_forest: 12
-    decision_tree: 16
+    decision_tree: 8
     xgboost: 10
   spaces:
     random_forest:
@@ -107,8 +107,8 @@ tuning:
       max_features: [0.5, 0.75, 1.0]
       feature_set: [all, contextual]
     decision_tree:
-      max_depth: [null, 10, 15, 20, 30]
-      min_samples_leaf: [1, 5, 20, 50, 100]
+      max_depth: [null, 20, 30, 40]
+      min_samples_leaf: [1, 5, 10, 20, 50]
       criterion: [gini, entropy]
       class_weight: [balanced, null]
     xgboost:
