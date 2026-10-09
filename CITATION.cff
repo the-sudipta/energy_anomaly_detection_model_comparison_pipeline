@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this benchmark, please cite it as below."
+title: "Energy Anomaly Detection: Model x Split Benchmark"
+type: software
+authors:
+  - family-names: "Das"
+    given-names: "Sudipta Kumar"
+repository-code: "https://github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline"
+license: MIT
+date-released: "2026-10-09"
+keywords:
+  - anomaly detection
+  - energy
+  - smart meters
+  - machine learning
+  - benchmark
+references:
+  - type: conference-paper
+    title: "LEAD1.0: A Large-scale Annotated Dataset for Energy Anomaly Detection in Commercial Buildings"
+    authors:
+      - family-names: "Gulati"
+        given-names: "Manoj"
+      - family-names: "Arjunan"
+        given-names: "Pandarasamy"
+    collection-title: "Proceedings of the Thirteenth ACM International Conference on Future Energy Systems (e-Energy '22)"
+    year: 2022
