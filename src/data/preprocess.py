@@ -176,6 +176,10 @@ def engineer_features(frame: pd.DataFrame, config: dict[str, Any]) -> pd.DataFra
     data_cfg, feat_cfg = config["data"], config["features"]
     frame = features.add_time_features(frame, data_cfg["time_column"])
     frame = features.add_reading_features(frame, data_cfg["reading"])
+    if feat_cfg.get("contextual", True):
+        added = features.add_context_features(frame)
+        if added:
+            _log.info("Added building-context deviation features: %s", added)
     if feat_cfg.get("rolling_features"):
         frame = features.add_rolling_features(
             frame, data_cfg["id_column"], data_cfg["time_column"], data_cfg["reading"],

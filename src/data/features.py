@@ -60,6 +60,43 @@ def add_reading_features(frame: pd.DataFrame, reading_column: str) -> pd.DataFra
     return frame
 
 
+CONTEXT_REFERENCES = {
+    "dev_building_hour": "gte_meter_building_id_hour",
+    "dev_building_weekday": "gte_meter_building_id_weekday",
+    "dev_building_month": "gte_meter_building_id_month",
+    "dev_building": "gte_meter_building_id",
+}
+
+
+def add_context_features(frame: pd.DataFrame) -> list[str]:
+    """Add how far each reading is from its building's typical level.
+
+    ``train_features.csv`` carries the typical log reading of each building per
+    hour, weekday and month (``gte_meter_building_id_*``). The difference
+    between the reading's own log value and these levels says whether it is
+    unusual *for that building at that time*, which is what LEAD labels as an
+    anomaly. Only feature columns are used; labels are never involved.
+
+    Args:
+        frame: DataFrame modified in place; needs ``log_meter_reading``.
+
+    Returns:
+        Names of the columns added (empty if the reference columns are absent).
+    """
+    if "log_meter_reading" not in frame.columns:
+        return []
+    added = []
+    for name, reference in CONTEXT_REFERENCES.items():
+        if reference in frame.columns:
+            frame[name] = (frame["log_meter_reading"] - frame[reference]).astype(np.float32)
+            added.append(name)
+    if added:
+        frame["dev_abs_max"] = frame[added].abs().max(axis=1).astype(np.float32)
+        frame["is_zero_reading"] = (frame["log_meter_reading"] == 0).astype(np.int8)
+        added += ["dev_abs_max", "is_zero_reading"]
+    return added
+
+
 def add_rolling_features(
     frame: pd.DataFrame, id_column: str, time_column: str, reading_column: str, window: int
 ) -> pd.DataFrame:
