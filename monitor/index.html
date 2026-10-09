@@ -143,6 +143,11 @@
   .feed li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: .88rem; animation: fadeIn .6s; }
   .feed li span { color: var(--muted); }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } }
+  .offline { display: none; padding: 24px 28px; margin-bottom: 22px; border-left: 5px solid var(--dt); }
+  .offline h2 { margin: 0 0 8px; font-size: 1.35rem; }
+  .offline p, .offline ol { margin: 6px 0; color: #4d433b; }
+  .offline code { background: var(--bg2); padding: 2px 7px; border-radius: 6px; font-family: "JetBrains Mono", monospace; font-size: .88em; }
+  .offline a { color: var(--rf); font-weight: 600; }
   footer { text-align: center; color: var(--soft); font-size: .8rem; margin-top: 40px; }
   .err { display: none; margin-bottom: 18px; padding: 14px 18px; border-radius: 16px; background: #f8e3e1; color: #7a2e28; }
 
@@ -173,6 +178,15 @@
   </header>
 
   <div class="err" id="err"></div>
+  <div class="card offline" id="offline">
+    <h2>Start the monitor server to see live progress</h2>
+    <p>This page gets its numbers from a small local server that reads the pipeline's log files. Opening <code>index.html</code> on its own can't read them.</p>
+    <ol>
+      <li>Open a terminal in the project folder (the pipeline can keep running in its own window).</li>
+      <li>Run <code>.\monitor.bat</code> in PowerShell, or double-click <b>monitor.bat</b> in File Explorer.</li>
+      <li>Keep that window open. This page connects automatically within a few seconds; or open <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>.</li>
+    </ol>
+  </div>
 
   <section class="hero">
     <div class="card ring-card">
@@ -281,17 +295,20 @@ const splitLbl = (s) => s.replace("split_", "").replace("_", "/");
 
 /* ---------- live status ---------- */
 let status = null, fetchedAt = 0, focus = "random_forest", follow = true;
+const API = location.protocol === "file:" ? "http://127.0.0.1:8765/api/status" : "/api/status";
 
 async function poll() {
   try {
-    const r = await fetch("/api/status", { cache: "no-store" });
+    const r = await fetch(API, { cache: "no-store" });
     status = await r.json(); fetchedAt = performance.now();
+    $("offline").style.display = "none";
     $("err").style.display = status.error ? "block" : "none";
     if (status.error) $("err").textContent = status.error;
     renderStatic();
   } catch (e) {
-    $("pillText").textContent = "Monitor offline – is server.py running?";
+    $("pillText").textContent = "Monitor server not running";
     $("pill").className = "pill error";
+    $("offline").style.display = "block";
   }
 }
 
