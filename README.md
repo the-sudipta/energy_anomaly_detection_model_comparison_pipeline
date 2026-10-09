@@ -41,6 +41,32 @@ python -m venv .venv
 .venv/bin/python -m src.main --stage all
 ```
 
+## Running again: the menu
+
+When earlier results exist, `run.bat` (with no arguments) asks what to do:
+
+1. **View the existing results** - opens the report and the live 3D monitor.
+2. **Run the pipeline, reusing finished work** - only missing or changed parts run.
+3. **Retrain everything from scratch** - same as `.\run.bat --force`.
+4. **Test a meter reading of your own** - see below.
+5. **Exit**
+
+Passing arguments (for example `.\run.bat --force`) skips the menu.
+
+## Testing your own reading
+
+```powershell
+.\.venv\Scripts\python.exe -m src.predict
+.\.venv\Scripts\python.exe -m src.predict --building 107 --time "2016-03-05 14:00" --reading 0
+.\.venv\Scripts\python.exe -m src.predict --random
+```
+
+A reading is identified by building and hour (LEAD covers 2016, hourly). Its
+building, weather and calendar features come from the dataset; the meter
+reading can be replaced by any value to ask "what if this building had used
+X kWh at that hour?". Every trained model (80/20 split by default, `--split`
+to change) prints its score, threshold and verdict.
+
 ## Live progress monitor
 
 `run.bat` opens the live monitor automatically in a minimised window. To open it on its own (for example while a stage started with `run_stage.bat` is running):
