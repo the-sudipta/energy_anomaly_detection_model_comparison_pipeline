@@ -372,6 +372,7 @@ function renderStatic() {
   $("nowMeta").textContent = run ? `Chunk ${s.runs_done + 1} of ${s.runs_total} · ${MODELS[model].name} · ${splitLbl(run.split)} split · ${run.n_train.toLocaleString()} training rows`
     : s.current_stage ? `Stage: ${STAGE_LABEL[s.current_stage]}` : "";
   if (follow && model) setFocus(model, false);
+  $("followBtn").lastChild.textContent = model ? "Follow live" : "Auto tour";
   document.querySelectorAll(".tab[data-m]").forEach(t => t.classList.toggle("training", t.dataset.m === model));
   renderTimeline(); renderRuns(); renderGantt(); renderFeed(); renderExplain();
 }
@@ -848,6 +849,13 @@ setTimeout(() => flyTo(focus), 400);
 
 poll(); setInterval(poll, 3000); setInterval(tick, 250);
 pollDigests(); setInterval(pollDigests, 15000);
+
+/* With nothing training (finished or cached run), "follow" tours the stations instead. */
+setInterval(() => {
+  if (!follow || (status && status.current_run)) return;
+  const ready = ORDER.filter(k => traces[k]);
+  if (ready.length > 1) setFocus(ready[(ready.indexOf(focus) + 1) % ready.length], true);
+}, 22000);
 </script>
 </body>
 </html>

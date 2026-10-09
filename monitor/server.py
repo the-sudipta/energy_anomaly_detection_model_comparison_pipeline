@@ -302,15 +302,17 @@ def _summary(parsed: dict[str, Any], runs: list[dict[str, Any]], stages: list[di
         "rows": parsed["rows"], "models": models, "splits": list(ratios),
         "split_pct": {k: round(100 * v) for k, v in ratios.items()}, "names": names,
         "runs_done": sum(r["status"] in ("done", "skipped") for r in runs), "runs_total": len(runs),
+        "runs_cached": sum(r["status"] == "skipped" for r in runs),
         "current_stage": active["name"] if active else None,
         "current_run": _jsonable(current) if current else None,
-        "activity": _activity(active, current, names, state),
+        "activity": _activity(active, current, names, state, sum(r["status"] == "skipped" for r in runs)),
         "stages": stages, "runs": [_jsonable(r) for r in runs],
         "events": [{"time": t.isoformat(), "text": text} for t, text in parsed["events"][-12:]][::-1],
     }
 
 
-def _activity(stage: dict[str, Any] | None, run: dict[str, Any] | None, names: dict[str, str], state: str) -> str:
+def _activity(stage: dict[str, Any] | None, run: dict[str, Any] | None, names: dict[str, str], state: str,
+              cached: int = 0) -> str:
     """Describe in one sentence what the pipeline is doing right now.
 
     Args:
@@ -318,10 +320,14 @@ def _activity(stage: dict[str, Any] | None, run: dict[str, Any] | None, names: d
         run: Active run record.
         names: Display names.
         state: Overall state.
+        cached: Number of runs reused from an earlier invocation.
 
     Returns:
         A human sentence.
     """
+    if state == "done" and cached:
+        return (f"Finished in seconds: {cached} model runs were reused from an earlier run, so nothing needed "
+                "training. Run .\\run.bat --force to retrain everything from scratch.")
     if state == "done":
         return "All stages finished. The report is ready in outputs/REPORT.html."
     if state == "error":

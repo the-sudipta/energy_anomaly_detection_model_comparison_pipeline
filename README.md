@@ -166,6 +166,7 @@ outputs/logs/                    one log file per invocation
 | `Python was not found` | Install Python 3.10+ with *Add to PATH*, then reopen the terminal. |
 | Out of memory | Run with `--sample 0.2` (or smaller), or close other programs. The full data needs roughly 4–6 GB of RAM. |
 | Stale results after changing settings | Rerun the affected stages with `--force`. |
+| A second `run.bat` finishes in seconds | Expected: finished runs are reused. Use `.\run.bat --force` to retrain everything. |
 
 ## Citation
 
