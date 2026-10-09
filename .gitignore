@@ -9,8 +9,8 @@ __pycache__/
 venv/
 
 # Data and generated outputs
-data/
-outputs/
+/data/
+/outputs/
 
 # Secrets
 config/kaggle.json
