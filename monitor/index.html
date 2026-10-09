@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline Live Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fbf7f1; --bg2: #f4ede3; --card: rgba(255, 255, 255, 0.72); --line: rgba(120, 98, 72, 0.14);
+    --ink: #2b2420; --muted: #85776b; --soft: #b3a596;
+    --rf: #1f6f78; --if: #7d4e77; --dt: #d9822b; --xgb: #4a6fa5;
+    --ok: #3f8f6b; --warn: #d9822b; --err: #c4524a; --glow: #f2b33d;
+    --radius: 22px; --shadow: 0 1px 0 rgba(255,255,255,.8) inset, 0 18px 50px -24px rgba(90, 62, 30, .28);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font: 15px/1.55 Inter, system-ui, sans-serif; min-height: 100vh; overflow-x: hidden;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #fde9d2 0%, transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, #e3f0ec 0%, transparent 55%),
+      radial-gradient(900px 700px at 50% 110%, #ece4f3 0%, transparent 60%), var(--bg);
+  }
+  .grain { position: fixed; inset: 0; pointer-events: none; opacity: .35; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .4 0 0 0 0 .3 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  main { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 34px 28px 80px; }
+  .card { background: var(--card); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  h1, h2, .serif { font-family: Fraunces, Georgia, serif; letter-spacing: -.015em; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  /* header */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin-bottom: 26px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--rf), var(--xgb)); color: #fff; box-shadow: 0 10px 24px -10px var(--rf); }
+  h1 { font-size: clamp(1.5rem, 2.6vw, 2.1rem); margin: 0; line-height: 1.1; }
+  .sub { color: var(--muted); margin: 2px 0 0; font-size: .92rem; }
+  .pill { display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 999px;
+    font-weight: 600; font-size: .88rem; background: #fff; border: 1px solid var(--line); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); position: relative; }
+  .dot::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid currentColor; opacity: 0; color: var(--ok); animation: ping 1.8s infinite; }
+  .pill.done .dot { background: var(--xgb); } .pill.done .dot::after { display: none; }
+  .pill.error .dot, .pill.stalled .dot { background: var(--err); } .pill.error .dot::after { color: var(--err); }
+  @keyframes ping { 0% { transform: scale(.6); opacity: .9 } 100% { transform: scale(1.8); opacity: 0 } }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: 330px 1fr; gap: 22px; margin-bottom: 22px; }
+  .ring-card { padding: 26px; display: grid; place-items: center; position: relative; overflow: hidden; }
+  .ring { position: relative; width: 260px; height: 260px; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .ring .pct { font-family: Fraunces, serif; font-size: 4.1rem; font-weight: 600; line-height: 1; }
+  .ring .pct small { font-size: 1.6rem; color: var(--muted); }
+  .ring .lbl { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat { padding: 20px 22px; position: relative; overflow: hidden; }
+  .stat .k { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+  .stat .v { font-family: Fraunces, serif; font-size: 2.15rem; font-weight: 600; margin-top: 6px; line-height: 1.1; }
+  .stat .h { color: var(--soft); font-size: .82rem; margin-top: 4px; }
+  .stat::before { content: ""; position: absolute; width: 120px; height: 120px; border-radius: 50%; right: -40px; top: -40px; opacity: .14; background: var(--c, var(--rf)); }
+  .now { grid-column: 1 / -1; padding: 20px 24px; display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; }
+  .now .icon { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; color: #fff; background: var(--c, var(--rf)); box-shadow: 0 10px 22px -10px var(--c, var(--rf)); }
+  .now .icon svg { animation: spin 3.5s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .now .what { font-size: 1.05rem; font-weight: 500; }
+  .now .meta { color: var(--muted); font-size: .86rem; margin-top: 2px; }
+  .bar { height: 10px; border-radius: 99px; background: var(--bg2); overflow: hidden; margin-top: 10px; position: relative; }
+  .bar > i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, var(--c, var(--rf)), color-mix(in srgb, var(--c, var(--rf)) 55%, #fff)); transition: width .9s ease; }
+  .bar > i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: shimmer 1.6s infinite; }
+  @keyframes shimmer { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+  .now .side { text-align: right; min-width: 170px; }
+  .now .side b { font-family: Fraunces, serif; font-size: 1.6rem; }
+
+  /* 3D */
+  .stage-wrap { display: grid; grid-template-columns: 1fr 340px; gap: 22px; margin-bottom: 22px; }
+  .scene { position: relative; height: 560px; overflow: hidden; padding: 0; }
+  .scene canvas { display: block; width: 100%; height: 100%; border-radius: var(--radius); }
+  .scene .tabs { position: absolute; left: 18px; top: 18px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 2; }
+  .tab { border: 1px solid var(--line); background: rgba(255,255,255,.85); color: var(--ink); padding: 8px 14px; border-radius: 999px; cursor: pointer; font: 600 .84rem Inter, sans-serif; display: inline-flex; gap: 8px; align-items: center; transition: all .25s; }
+  .tab i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .tab.active { background: var(--c); color: #fff; border-color: transparent; box-shadow: 0 10px 22px -12px var(--c); }
+  .tab.active i { background: #fff; }
+  .tab .live { font-size: .68rem; padding: 2px 7px; border-radius: 99px; background: rgba(255,255,255,.3); display: none; }
+  .tab.training .live { display: inline; }
+  .tab:not(.active).training .live { background: var(--c); color: #fff; }
+  .scene .follow { position: absolute; right: 18px; top: 18px; z-index: 2; }
+  .scene .hint { position: absolute; left: 20px; bottom: 16px; color: var(--muted); font-size: .8rem; z-index: 2; }
+  .explain { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  .explain h2 { margin: 0; font-size: 1.55rem; color: var(--c); }
+  .explain .tag { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--c); background: color-mix(in srgb, var(--c) 12%, #fff); padding: 4px 10px; border-radius: 99px; }
+  .explain p { margin: 0; color: #4d433b; }
+  .explain ol { margin: 0; padding-left: 1.1rem; color: #4d433b; } .explain li { margin: 5px 0; }
+  .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: auto; }
+  .mini div { background: var(--bg2); border-radius: 10px; padding: 8px 4px; text-align: center; font-size: .72rem; color: var(--muted); }
+  .mini b { display: block; font-size: .95rem; color: var(--ink); font-family: Fraunces, serif; }
+
+  /* timeline */
+  .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 34px 4px 14px; }
+  .section-title h2 { margin: 0; font-size: 1.45rem; }
+  .section-title span { color: var(--muted); font-size: .88rem; }
+  .timeline { padding: 22px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .st { padding: 14px; border-radius: 16px; background: var(--bg2); position: relative; overflow: hidden; transition: transform .3s; }
+  .st:hover { transform: translateY(-3px); }
+  .st .n { font-weight: 700; font-size: .9rem; }
+  .st .s { font-size: .74rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .06em; }
+  .st .t { font-size: .85rem; margin-top: 10px; }
+  .st.done { background: #e6f2ec; } .st.done .s { color: var(--ok); }
+  .st.running { background: #fff; box-shadow: 0 0 0 2px var(--glow), 0 14px 30px -18px var(--glow); }
+  .st.running .s { color: var(--warn); }
+  .st.error { background: #f8e3e1; } .st.error .s { color: var(--err); }
+  .st .num { position: absolute; right: 10px; top: 6px; font-family: Fraunces, serif; font-size: 2rem; opacity: .1; }
+
+  /* run grid */
+  .grid-card { padding: 22px; overflow-x: auto; }
+  table.runs { width: 100%; border-collapse: separate; border-spacing: 8px; min-width: 760px; }
+  .runs th { font-size: .78rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 0 4px; }
+  .runs td.m { font-weight: 600; white-space: nowrap; }
+  .runs td.m i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+  .cell { border-radius: 14px; padding: 10px 12px; background: var(--bg2); min-height: 66px; position: relative; overflow: hidden; transition: transform .25s; }
+  .cell:hover { transform: scale(1.03); }
+  .cell .a { font-size: .74rem; color: var(--muted); }
+  .cell .b { font-family: Fraunces, serif; font-size: 1.15rem; font-weight: 600; }
+  .cell.done { background: color-mix(in srgb, var(--c) 13%, #fff); }
+  .cell.done .b { color: var(--c); }
+  .cell.running { background: #fff; box-shadow: 0 0 0 2px var(--c); }
+  .cell.running::before { content: ""; position: absolute; left: 0; bottom: 0; height: 4px; width: var(--p, 0%); background: var(--c); transition: width .9s; }
+  .cell.failed { background: #f8e3e1; }
+  .cell.pending .b { color: var(--soft); }
+
+  /* lower */
+  .lower { display: grid; grid-template-columns: 1.3fr 1fr; gap: 22px; }
+  .gantt { padding: 22px; }
+  .gantt .row { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 10px; margin: 7px 0; font-size: .84rem; }
+  .gantt .track { height: 14px; background: var(--bg2); border-radius: 99px; position: relative; overflow: hidden; }
+  .gantt .track i { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: var(--c); opacity: .85; }
+  .gantt .track i.est { opacity: .25; }
+  .feed { padding: 22px; }
+  .feed ul { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: .88rem; animation: fadeIn .6s; }
+  .feed li span { color: var(--muted); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } }
+  footer { text-align: center; color: var(--soft); font-size: .8rem; margin-top: 40px; }
+  .err { display: none; margin-bottom: 18px; padding: 14px 18px; border-radius: 16px; background: #f8e3e1; color: #7a2e28; }
+
+  @media (max-width: 1100px) {
+    .hero, .stage-wrap, .lower { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .timeline { grid-template-columns: repeat(4, 1fr); }
+    .now { grid-template-columns: auto 1fr; } .now .side { grid-column: 1 / -1; text-align: left; }
+  }
+  @media (max-width: 600px) {
+    main { padding: 20px 14px 60px; } .timeline { grid-template-columns: repeat(2, 1fr); }
+    .scene { height: 420px; } .ring { width: 220px; height: 220px; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<main>
+  <header>
+    <div class="brand">
+      <div class="logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+      <div>
+        <h1>Energy anomaly benchmark &middot; live</h1>
+        <p class="sub" id="sub">4 models &times; 5 splits on the LEAD smart-meter readings</p>
+      </div>
+    </div>
+    <div class="pill" id="pill"><span class="dot"></span><span id="pillText">Connecting&hellip;</span></div>
+  </header>
+
+  <div class="err" id="err"></div>
+
+  <section class="hero">
+    <div class="card ring-card">
+      <div class="ring">
+        <svg width="260" height="260" viewBox="0 0 260 260">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1f6f78"/><stop offset="50%" stop-color="#4a6fa5"/><stop offset="100%" stop-color="#d9822b"/>
+            </linearGradient>
+          </defs>
+          <circle cx="130" cy="130" r="112" fill="none" stroke="#efe6da" stroke-width="18"/>
+          <circle id="ringArc" cx="130" cy="130" r="112" fill="none" stroke="url(#g)" stroke-width="18" stroke-linecap="round" stroke-dasharray="703.7" stroke-dashoffset="703.7" style="transition: stroke-dashoffset 1s ease"/>
+          <g id="ticks"></g>
+        </svg>
+        <div class="center"><div>
+          <div class="pct"><span id="pct">0</span><small>%</small></div>
+          <div class="lbl">of the pipeline done</div>
+          <div class="lbl mono" id="leftPct">100% left</div>
+        </div></div>
+      </div>
+    </div>
+    <div style="display:grid; gap:22px; grid-template-rows: auto 1fr;">
+      <div class="stats">
+        <div class="card stat" style="--c: var(--rf)"><div class="k">Elapsed</div><div class="v mono" id="elapsed">--:--</div><div class="h" id="startedAt">since &ndash;</div></div>
+        <div class="card stat" style="--c: var(--dt)"><div class="k">Remaining</div><div class="v mono" id="remaining">--:--</div><div class="h" id="totalEst">total &ndash;</div></div>
+        <div class="card stat" style="--c: var(--xgb)"><div class="k">Finishes at</div><div class="v" id="eta" style="white-space:nowrap">&ndash;</div><div class="h" id="etaDay">local time</div></div>
+        <div class="card stat" style="--c: var(--if)"><div class="k">Runs done</div><div class="v"><span id="runsDone">0</span><span style="color:var(--soft)"> / <span id="runsTotal">20</span></span></div><div class="h" id="chunkInfo">model &times; split chunks</div></div>
+      </div>
+      <div class="card now" id="nowCard">
+        <div class="icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg></div>
+        <div>
+          <div class="what" id="activity">Waiting for the pipeline&hellip;</div>
+          <div class="meta" id="nowMeta">&nbsp;</div>
+          <div class="bar"><i id="nowBar" style="width:0%"></i></div>
+        </div>
+        <div class="side"><div class="meta">this chunk</div><b class="mono" id="nowTime">&ndash;</b><div class="meta" id="nowLeft">&nbsp;</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stage-wrap">
+    <div class="card scene" id="scene">
+      <div class="tabs" id="tabs"></div>
+      <div class="follow"><button class="tab active" id="followBtn" style="--c:#2b2420"><i></i>Follow live</button></div>
+      <div class="hint">Drag to orbit &middot; Ctrl + scroll to zoom &middot; the highlighted model is the one training now</div>
+    </div>
+    <div class="card explain" id="explain"></div>
+  </section>
+
+  <div class="section-title"><h2>Pipeline stages</h2><span id="stageInfo"></span></div>
+  <section class="card timeline" id="timeline"></section>
+
+  <div class="section-title"><h2>Model &times; split chunks</h2><span>colour = model &middot; number = test F1 &middot; time = wall clock per chunk</span></div>
+  <section class="card grid-card"><table class="runs" id="runs"></table></section>
+
+  <section class="lower">
+    <div>
+      <div class="section-title"><h2>Time budget</h2><span>solid = spent &middot; faded = estimated</span></div>
+      <div class="card gantt" id="gantt"></div>
+    </div>
+    <div>
+      <div class="section-title"><h2>Activity</h2><span id="logName"></span></div>
+      <div class="card feed"><ul id="feed"></ul></div>
+    </div>
+  </section>
+  <footer>Estimates recalibrate after every finished chunk from the timings measured on this machine.</footer>
+</main>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+/* ---------- model descriptions ---------- */
+const MODELS = {
+  random_forest: { name: "Random Forest", color: "#1f6f78", tag: "supervised · bagging",
+    text: "Hundreds of decision trees, each grown on a bootstrap sample of the readings and a random subset of features. Every tree votes and the share of “anomaly” votes is the score.",
+    steps: ["Draw a bootstrap sample per tree", "Grow 300 trees with balanced class weights", "Each reading travels down every tree", "Average the votes into P(anomaly)"] },
+  isolation_forest: { name: "Isolation Forest", color: "#7d4e77", tag: "unsupervised · isolation",
+    text: "No labels during training. It keeps cutting the feature space with random splits; unusual readings get isolated after very few cuts, so a short path means a high anomaly score.",
+    steps: ["Pick a random feature and cut point", "Repeat until every point is alone", "Measure the path length to isolate each point", "Short path → anomaly (contamination = train rate)"] },
+  decision_tree: { name: "Decision Tree", color: "#d9822b", tag: "supervised · single tree",
+    text: "One tree of yes/no questions such as “is the reading below its usual level for this hour?”. A reading follows one path from the root to a leaf, whose anomaly share is the score.",
+    steps: ["Find the split that best separates classes", "Recurse until leaves hold ≥ 5 readings", "Route each reading root → leaf", "Leaf anomaly share is the prediction"] },
+  xgboost: { name: "XGBoost", color: "#4a6fa5", tag: "supervised · boosting",
+    text: "Builds 400 shallow trees one after another. Each new tree corrects the errors left by the previous ones, so the residual error shrinks round after round.",
+    steps: ["Start from a constant prediction", "Fit a tree to the current errors", "Add it with learning rate 0.08", "Repeat 400 rounds, weighting rare anomalies"] },
+};
+const ORDER = ["random_forest", "isolation_forest", "decision_tree", "xgboost"];
+const STAGE_LABEL = { download: "Download", preprocess: "Preprocess", split: "Split", train_eval: "Train & evaluate", aggregate: "Aggregate", visualize: "Visualize", report: "Report" };
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const fmt = (s) => { if (s == null || !isFinite(s)) return "–"; s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
+const fmtShort = (s) => { if (s == null) return "–"; s = Math.round(s); return s >= 3600 ? `${(s/3600).toFixed(1)} h` : s >= 60 ? `${Math.round(s/60)} min` : `${s}s`; };
+const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const clockBig = (iso) => { const d = new Date(iso); return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}<small style="font-size:.5em;color:var(--muted);margin-left:4px">${d.getHours() < 12 ? "AM" : "PM"}</small>`; };
+const splitLbl = (s) => s.replace("split_", "").replace("_", "/");
+
+/* ---------- live status ---------- */
+let status = null, fetchedAt = 0, focus = "random_forest", follow = true;
+
+async function poll() {
+  try {
+    const r = await fetch("/api/status", { cache: "no-store" });
+    status = await r.json(); fetchedAt = performance.now();
+    $("err").style.display = status.error ? "block" : "none";
+    if (status.error) $("err").textContent = status.error;
+    renderStatic();
+  } catch (e) {
+    $("pillText").textContent = "Monitor offline – is server.py running?";
+    $("pill").className = "pill error";
+  }
+}
+
+function drift() { return status && status.state === "running" ? (performance.now() - fetchedAt) / 1000 : 0; }
+
+function tick() {
+  if (!status || !status.elapsed && status.state === "idle") return;
+  const d = drift();
+  const elapsed = status.elapsed + d, remaining = Math.max(status.remaining - d, 0);
+  const pct = status.state === "done" ? 100 : Math.min(99.9, 100 * elapsed / (elapsed + remaining || 1));
+  $("pct").textContent = pct >= 99.95 ? "100" : pct.toFixed(1);
+  $("leftPct").textContent = `${(100 - pct).toFixed(1)}% left`;
+  $("ringArc").setAttribute("stroke-dashoffset", (703.7 * (1 - pct / 100)).toFixed(1));
+  $("elapsed").textContent = fmt(elapsed);
+  $("remaining").textContent = status.state === "done" ? "0:00" : fmt(remaining);
+  const run = status.current_run;
+  if (run) {
+    const spent = run.seconds + d, est = Math.max(run.estimate, spent);
+    $("nowTime").textContent = fmt(spent);
+    $("nowLeft").textContent = `≈ ${fmt(Math.max(run.estimate - spent, 0))} left of ${fmtShort(est)}`;
+    $("nowBar").style.width = `${Math.min(100, 100 * spent / est).toFixed(1)}%`;
+    const cell = document.querySelector(".cell.running"); if (cell) cell.style.setProperty("--p", `${Math.min(100, 100 * spent / est)}%`);
+  } else if (status.current_stage) {
+    const st = status.stages.find(s => s.name === status.current_stage);
+    if (st) { const spent = st.elapsed + d; $("nowTime").textContent = fmt(spent);
+      $("nowLeft").textContent = `≈ ${fmt(Math.max(st.estimate - spent, 0))} left`;
+      $("nowBar").style.width = `${Math.min(100, 100 * spent / Math.max(st.estimate, spent + 1)).toFixed(1)}%`; }
+  }
+}
+
+function renderStatic() {
+  const s = status; if (!s || s.state === "idle") { $("activity").textContent = s ? s.message : ""; return; }
+  const pillText = { running: "Running", done: "Finished", error: "Stopped with an error", stalled: "No progress for 30 min" };
+  $("pill").className = `pill ${s.state}`; $("pillText").textContent = pillText[s.state] || s.state;
+  $("startedAt").textContent = `since ${clock(s.started)}`;
+  $("totalEst").textContent = `≈ ${fmtShort(s.total)} in total`;
+  $("eta").innerHTML = s.state === "done" ? "done" : clockBig(s.eta);
+  const etaDate = new Date(s.eta), today = new Date();
+  $("etaDay").textContent = s.state === "done" ? "report is ready" : (etaDate.toDateString() === today.toDateString() ? "today, local time" : etaDate.toLocaleDateString());
+  $("runsDone").textContent = s.runs_done; $("runsTotal").textContent = s.runs_total;
+  $("chunkInfo").textContent = `${s.runs_total - s.runs_done} chunks to go`;
+  $("activity").textContent = s.activity;
+  $("sub").textContent = `4 models × 5 splits on ${s.rows ? s.rows.toLocaleString() : "the"} LEAD smart-meter readings`;
+  $("logName").textContent = s.log;
+  const run = s.current_run, model = run ? run.model : null;
+  $("nowCard").style.setProperty("--c", model ? MODELS[model].color : "#2b2420");
+  $("nowMeta").textContent = run ? `Chunk ${s.runs_done + 1} of ${s.runs_total} · ${MODELS[model].name} · ${splitLbl(run.split)} split · ${run.n_train.toLocaleString()} training rows`
+    : s.current_stage ? `Stage: ${STAGE_LABEL[s.current_stage]}` : "";
+  if (follow && model) setFocus(model, false);
+  document.querySelectorAll(".tab[data-m]").forEach(t => t.classList.toggle("training", t.dataset.m === model));
+  renderTimeline(); renderRuns(); renderGantt(); renderFeed(); renderExplain();
+}
+
+function renderTimeline() {
+  const s = status;
+  $("timeline").innerHTML = s.stages.map((st, i) => {
+    const t = st.status === "done" ? `took ${fmtShort(st.elapsed)}` : st.status === "running" ? `${fmtShort(st.elapsed)} · ≈ ${fmtShort(st.remaining)} left` : `≈ ${fmtShort(st.estimate)}`;
+    return `<div class="st ${st.status}"><div class="num">${i + 1}</div><div class="n">${STAGE_LABEL[st.name]}</div><div class="s">${st.status}</div><div class="t">${t}</div></div>`;
+  }).join("");
+  $("stageInfo").textContent = `${s.stages.filter(x => x.status === "done").length} of 7 complete`;
+}
+
+function renderRuns() {
+  const s = status;
+  let html = `<tr><th></th>${s.splits.map(x => `<th>${splitLbl(x)} <span style="text-transform:none;letter-spacing:0">train/test</span></th>`).join("")}</tr>`;
+  for (const m of s.models) {
+    html += `<tr><td class="m" style="--c:${MODELS[m].color}"><i></i>${MODELS[m].name}</td>`;
+    for (const sp of s.splits) {
+      const r = s.runs.find(x => x.model === m && x.split === sp);
+      const a = r.status === "done" ? `${fmtShort(r.seconds)} · fit ${fmtShort(r.fit)}` : r.status === "running" ? "training now" : r.status === "pending" ? `≈ ${fmtShort(r.estimate)}` : r.status;
+      const b = r.status === "done" ? `F1 ${r.f1.toFixed(3)}` : r.status === "running" ? "●" : r.status === "skipped" ? "cached" : "—";
+      html += `<td><div class="cell ${r.status}" style="--c:${MODELS[m].color}" title="${MODELS[m].name} · ${splitLbl(sp)} · ${r.n_train.toLocaleString()} train rows${r.pr_auc != null ? ` · PR-AUC ${r.pr_auc.toFixed(3)} · MCC ${r.mcc.toFixed(3)}` : ""}"><div class="a">${a}</div><div class="b">${b}</div></div></td>`;
+    }
+    html += "</tr>";
+  }
+  $("runs").innerHTML = html;
+}
+
+function renderGantt() {
+  const s = status, max = Math.max(...s.runs.map(r => r.estimate || 0), 1);
+  const rows = s.models.map(m => {
+    const rs = s.runs.filter(r => r.model === m);
+    const spent = rs.reduce((a, r) => a + (r.status === "done" ? r.seconds : r.status === "running" ? r.seconds : 0), 0);
+    const total = rs.reduce((a, r) => a + (r.estimate || 0), 0);
+    return { m, spent, total };
+  });
+  const top = Math.max(...rows.map(r => r.total), 1);
+  $("gantt").innerHTML = rows.map(r => `<div class="row" style="--c:${MODELS[r.m].color}"><div><b>${MODELS[r.m].name}</b></div>
+    <div class="track"><i class="est" style="left:0;width:${100 * r.total / top}%"></i><i style="left:0;width:${100 * r.spent / top}%"></i></div>
+    <div class="mono" style="text-align:right">${fmtShort(r.total)}</div></div>`).join("") +
+    `<div style="color:var(--muted);font-size:.8rem;margin-top:10px">Total estimated training time per model across all five splits. Longest single chunk ≈ ${fmtShort(max)}.</div>`;
+}
+
+function renderFeed() {
+  $("feed").innerHTML = status.events.map(e => `<li><span class="mono">${clock(e.time)}</span><div>${e.text}</div></li>`).join("");
+}
+
+function renderExplain() {
+  const m = MODELS[focus], s = status;
+  const runs = s ? s.runs.filter(r => r.model === focus) : [];
+  const mini = runs.map(r => `<div>${splitLbl(r.split)}<b>${r.status === "done" ? r.f1.toFixed(2) : r.status === "running" ? "●" : "–"}</b></div>`).join("");
+  $("explain").style.setProperty("--c", m.color);
+  $("explain").innerHTML = `<span class="tag">${m.tag}</span><h2>${m.name}</h2><p>${m.text}</p>
+    <ol>${m.steps.map(x => `<li>${x}</li>`).join("")}</ol>
+    <div><div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Test F1 per split</div><div class="mini">${mini}</div></div>`;
+}
+
+/* ---------- tabs ---------- */
+$("tabs").innerHTML = ORDER.map(m => `<button class="tab" data-m="${m}" style="--c:${MODELS[m].color}"><i></i>${MODELS[m].name}<span class="live">training</span></button>`).join("");
+document.querySelectorAll(".tab[data-m]").forEach(t => t.onclick = () => { follow = false; $("followBtn").classList.remove("active"); setFocus(t.dataset.m, true); });
+$("followBtn").onclick = () => { follow = !follow; $("followBtn").classList.toggle("active", follow); if (follow && status && status.current_run) setFocus(status.current_run.model, true); };
+
+function setFocus(m, force) {
+  if (m === focus && !force) return;
+  focus = m;
+  document.querySelectorAll(".tab[data-m]").forEach(t => t.classList.toggle("active", t.dataset.m === m));
+  flyTo(m); renderExplain();
+}
+
+/* ---------- ring ticks ---------- */
+(() => { let g = ""; for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2, r1 = 96, r2 = i % 5 ? 99 : 102;
+  g += `<line x1="${130 + r1 * Math.cos(a)}" y1="${130 + r1 * Math.sin(a)}" x2="${130 + r2 * Math.cos(a)}" y2="${130 + r2 * Math.sin(a)}" stroke="#d9cdbd" stroke-width="${i % 5 ? 1 : 2}"/>`; }
+  $("ticks").innerHTML = g; })();
+
+/* ---------- 3D scene ---------- */
+const host = $("scene");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+host.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xfbf7f1, 40, 110);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.06; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 10; controls.maxDistance = 95;
+controls.enableZoom = false;
+renderer.domElement.addEventListener("wheel", (e) => { if (!e.ctrlKey) return; e.preventDefault(); camera.position.lerp(controls.target, e.deltaY < 0 ? 0.08 : -0.08); }, { passive: false });
+
+scene.add(new THREE.HemisphereLight(0xfff6ea, 0xe8dccb, 1.15));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(18, 30, 14); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70 });
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(120, 64), new THREE.ShadowMaterial({ opacity: 0.12 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.05, ...o });
+const STATION = { random_forest: new THREE.Vector3(-39, 0, 0), isolation_forest: new THREE.Vector3(-13, 0, -8), decision_tree: new THREE.Vector3(13, 0, 0), xgboost: new THREE.Vector3(39, 0, -8) };
+const stations = {};
+
+function pedestal(key) {
+  const g = new THREE.Group(); g.position.copy(STATION[key]);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(8.6, 9, 0.5, 64), mat(0xffffff, { roughness: 0.9 }));
+  disc.position.y = 0.25; disc.receiveShadow = true; g.add(disc);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(8.8, 0.08, 8, 96), mat(MODELS[key].color, { emissive: MODELS[key].color, emissiveIntensity: 0.25 }));
+  rim.rotation.x = Math.PI / 2; rim.position.y = 0.52; g.add(rim); g.userData.rim = rim;
+  scene.add(g); return g;
+}
+
+/* Random Forest: ring of trees, data particles fly in, votes rise to an orb */
+function buildRF() {
+  const g = pedestal("random_forest"), c = new THREE.Color(MODELS.random_forest.color), trees = [];
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * Math.PI * 2, r = 5.3, t = new THREE.Group();
+    t.position.set(Math.cos(a) * r, 0.5, Math.sin(a) * r);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.6, 8), mat(0x8a6a4f)); trunk.position.y = 0.8; trunk.castShadow = true; t.add(trunk);
+    const shade = c.clone().offsetHSL((i % 3 - 1) * 0.03, 0, (i % 4) * 0.04);
+    for (let k = 0; k < 3; k++) { const cone = new THREE.Mesh(new THREE.ConeGeometry(1.1 - k * 0.25, 1.3, 9), mat(shade, { flatShading: true }));
+      cone.position.y = 1.9 + k * 0.7; cone.castShadow = true; t.add(cone); }
+    t.userData.phase = i * 0.7; g.add(t); trees.push(t);
+  }
+  const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 2), mat(c, { emissive: c, emissiveIntensity: 0.35, flatShading: true }));
+  orb.position.y = 7.2; orb.castShadow = true; g.add(orb);
+  const particles = makeParticles(g, 70, c);
+  stations.random_forest = { g, update(t, k) {
+    trees.forEach((tr, i) => { tr.scale.setScalar(1 + 0.05 * Math.sin(t * 2 * k + tr.userData.phase)); tr.rotation.y = Math.sin(t * 0.5 + i) * 0.2; });
+    orb.rotation.y = t * 0.8 * k; orb.material.emissiveIntensity = 0.25 + 0.25 * k * (0.5 + 0.5 * Math.sin(t * 3));
+    particles.forEach((p, i) => { const ph = (t * 0.35 * (0.4 + k) + i / particles.length) % 1, tree = trees[i % trees.length].position;
+      const up = ph < 0.5 ? ph * 2 : (ph - 0.5) * 2;
+      if (ph < 0.5) p.position.set(tree.x * up, 0.9 + Math.sin(up * Math.PI) * 1.5, tree.z * up);
+      else p.position.set(tree.x * (1 - up), 4 + up * 3.2, tree.z * (1 - up));
+      p.material.opacity = 0.25 + 0.75 * k; });
+  } };
+}
+
+/* Isolation Forest: point cloud, random cutting planes, outliers isolated in red */
+function buildIF() {
+  const g = pedestal("isolation_forest"), c = new THREE.Color(MODELS.isolation_forest.color);
+  const pts = [], outliers = [];
+  const dotGeo = new THREE.SphereGeometry(0.16, 10, 10);
+  for (let i = 0; i < 150; i++) {
+    const r = Math.pow(Math.random(), 0.6) * 2.6, a = Math.random() * Math.PI * 2, y = 3.2 + (Math.random() - 0.5) * 2.6;
+    const m = new THREE.Mesh(dotGeo, mat(c.clone().offsetHSL(0, -0.1, 0.25))); m.position.set(Math.cos(a) * r, y, Math.sin(a) * r); g.add(m); pts.push(m);
+  }
+  [[5.6, 5.4, 2.4], [-5.2, 1.6, -3.4], [3.6, 6.4, -4.8], [-4.4, 6.1, 4.2]].forEach(([x, y, z]) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), mat(0xc4524a, { emissive: 0xc4524a, emissiveIntensity: 0.3 }));
+    m.position.set(x, y, z); m.castShadow = true; g.add(m); outliers.push(m);
+  });
+  const planes = [];
+  for (let i = 0; i < 4; i++) {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(13, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }));
+    p.position.y = 3.6; g.add(p); planes.push(p);
+  }
+  stations.isolation_forest = { g, update(t, k) {
+    g.children.forEach(o => { if (pts.includes(o)) o.position.y += Math.sin(t * 1.3 + o.position.x * 3) * 0.002; });
+    planes.forEach((p, i) => { const cyc = (t * (0.18 + 0.25 * k) + i * 0.25) % 1, axis = i % 2;
+      p.rotation.set(axis ? 0 : Math.PI / 2, axis ? Math.PI / 2 * (i > 1 ? 1 : 0) : 0, 0);
+      const pos = -6 + cyc * 12; if (axis) p.position.x = pos; else p.position.y = 0.6 + cyc * 7;
+      p.material.opacity = 0.16 * Math.sin(cyc * Math.PI) * (0.3 + k); });
+    outliers.forEach((o, i) => { const s = 1 + 0.35 * Math.max(0, Math.sin(t * 2.4 * (0.4 + k) + i * 1.5)); o.scale.setScalar(s); o.material.emissiveIntensity = 0.2 + 0.6 * (s - 1) * k; });
+    g.rotation.y = t * 0.12;
+  } };
+}
+
+/* Decision Tree: binary tree, a reading travels root -> leaf lighting its path */
+function buildDT() {
+  const g = pedestal("decision_tree"), c = new THREE.Color(MODELS.decision_tree.color), nodes = [], edges = [];
+  const depth = 4, nodeGeo = new THREE.SphereGeometry(0.42, 20, 20);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xcdbfae });
+  for (let d = 0; d < depth; d++) for (let i = 0; i < 2 ** d; i++) {
+    const x = ((i + 0.5) / 2 ** d - 0.5) * 14, y = 8 - d * 2.1;
+    const leaf = d === depth - 1;
+    const m = new THREE.Mesh(leaf ? new THREE.BoxGeometry(0.75, 0.75, 0.75) : nodeGeo, mat(leaf ? (i % 3 === 0 ? 0xc4524a : 0x9fb8a8) : 0xffffff));
+    m.position.set(x, y, 0); m.castShadow = true; g.add(m); nodes.push({ m, d, i, base: m.material.color.clone() });
+    if (d > 0) { const parent = nodes.find(n => n.d === d - 1 && n.i === Math.floor(i / 2));
+      const geo = new THREE.BufferGeometry().setFromPoints([parent.m.position, m.position]);
+      const l = new THREE.Line(geo, lineMat.clone()); g.add(l); edges.push({ l, from: parent, to: nodes[nodes.length - 1] }); }
+  }
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), mat(c, { emissive: c, emissiveIntensity: 0.8 })); g.add(ball);
+  let path = [], seg = 0, lastPick = -1;
+  const pick = () => { path = [nodes[0]]; let i = 0; for (let d = 1; d < depth; d++) { i = i * 2 + (Math.random() < 0.5 ? 0 : 1); path.push(nodes.find(n => n.d === d && n.i === i)); } };
+  pick();
+  stations.decision_tree = { g, update(t, k) {
+    const speed = 0.35 + 0.9 * k, prog = t * speed, cycle = Math.floor(prog / depth);
+    if (cycle !== lastPick) { lastPick = cycle; pick(); }
+    const p = prog % depth, idx = Math.min(Math.floor(p), depth - 2), f = p - Math.floor(p);
+    const a = path[idx].m.position, b = path[Math.min(idx + 1, depth - 1)].m.position;
+    ball.position.lerpVectors(a, b, Math.min(f * 1.2, 1)); ball.position.z = 0.6;
+    nodes.forEach(n => { const on = path.slice(0, idx + 2).includes(n); n.m.material.emissive = new THREE.Color(on ? c : 0x000000); n.m.material.emissiveIntensity = on ? 0.45 * (0.4 + k) : 0; });
+    edges.forEach(e => { const on = path.includes(e.from) && path.includes(e.to) && path.indexOf(e.to) <= idx + 1; e.l.material.color.set(on ? c : 0xcdbfae); });
+    g.rotation.y = Math.sin(t * 0.3) * 0.35;
+  } };
+}
+
+/* XGBoost: boosting rounds of small trees + shrinking residual bars */
+function buildXGB() {
+  const g = pedestal("xgboost"), c = new THREE.Color(MODELS.xgboost.color), rounds = [], bars = [];
+  for (let i = 0; i < 7; i++) {
+    const t = new THREE.Group(), x = -6 + i * 2;
+    t.position.set(x, 0.5, -2.2);
+    const root = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 14), mat(c)); root.position.y = 3.2; t.add(root);
+    [-0.6, 0.6].forEach(dx => { const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 14), mat(c.clone().offsetHSL(0, 0, 0.15)));
+      leaf.position.set(dx, 2.1, 0); t.add(leaf);
+      t.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([root.position, leaf.position]), new THREE.LineBasicMaterial({ color: c }))); });
+    t.children.forEach(o => o.castShadow = true);
+    g.add(t); rounds.push(t);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1, 1.1), mat(0xd9822b)); bar.position.set(x, 0.5, 2.6); bar.castShadow = true; g.add(bar); bars.push(bar);
+  }
+  const plus = new THREE.Mesh(new THREE.TorusKnotGeometry(0.7, 0.2, 80, 12), mat(c, { emissive: c, emissiveIntensity: 0.3 }));
+  plus.position.set(0, 6.2, -2.2); g.add(plus);
+  stations.xgboost = { g, update(t, k) {
+    const speed = 0.25 + 0.7 * k, step = (t * speed) % (rounds.length + 2);
+    rounds.forEach((r, i) => { const v = THREE.MathUtils.clamp(step - i, 0, 1); r.scale.setScalar(0.001 + v); r.position.y = 0.5 + (1 - v) * 1.5; });
+    bars.forEach((b, i) => { const shown = THREE.MathUtils.clamp(step - i, 0, 1); const h = 0.3 + 3.6 * Math.exp(-0.45 * i) * (0.6 + 0.4 * Math.sin(t + i));
+      b.scale.y = Math.max(0.05, h * (0.2 + 0.8 * shown)); b.position.y = 0.5 + b.scale.y / 2;
+      b.material.color.set(new THREE.Color(0xd9822b).lerp(c, i / bars.length)); });
+    plus.rotation.x = t * 0.6 * (0.3 + k); plus.rotation.y = t * 0.4;
+  } };
+}
+
+function makeParticles(g, n, color) {
+  const geo = new THREE.SphereGeometry(0.11, 8, 8), arr = [];
+  for (let i = 0; i < n; i++) { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).offsetHSL(0, 0, 0.15), transparent: true })); g.add(m); arr.push(m); }
+  return arr;
+}
+
+buildRF(); buildIF(); buildDT(); buildXGB();
+
+/* floating label sprites */
+for (const key of ORDER) {
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 128; const ctx = cv.getContext("2d");
+  ctx.font = "600 60px Fraunces, Georgia, serif"; ctx.fillStyle = MODELS[key].color; ctx.textAlign = "center"; ctx.fillText(MODELS[key].name, 256, 82);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  sp.scale.set(8, 2, 1); sp.position.copy(STATION[key]).add(new THREE.Vector3(0, 10.3, 0)); scene.add(sp);
+}
+
+/* camera fly-to */
+let camFrom = null, camTo = null, tgtFrom = null, tgtTo = null, flyT = 1;
+function flyTo(key) {
+  const p = STATION[key];
+  camFrom = camera.position.clone(); tgtFrom = controls.target.clone();
+  tgtTo = p.clone().add(new THREE.Vector3(0, 4.6, 0)); camTo = p.clone().add(new THREE.Vector3(0, 10.5, 27)); flyT = 0;
+}
+camera.position.set(0, 30, 80); controls.target.set(0, 3, -2);
+
+function resize() { const w = host.clientWidth, h = host.clientHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(host); resize();
+
+const clockT = new THREE.Clock(); const activity = {};
+function animate() {
+  const t = clockT.getElapsedTime();
+  if (flyT < 1) { flyT = Math.min(1, flyT + 0.012); const e = 1 - Math.pow(1 - flyT, 3);
+    camera.position.lerpVectors(camFrom, camTo, e); controls.target.lerpVectors(tgtFrom, tgtTo, e); }
+  const live = status && status.current_run ? status.current_run.model : null;
+  for (const key of ORDER) {
+    const target = key === live ? 1 : key === focus ? 0.6 : 0.15;
+    activity[key] = (activity[key] ?? 0.2) + (target - (activity[key] ?? 0.2)) * 0.03;
+    stations[key].update(t, activity[key]);
+    const rim = stations[key].g.userData.rim; rim.material.emissiveIntensity = 0.15 + 0.6 * activity[key] * (0.6 + 0.4 * Math.sin(t * 3));
+  }
+  controls.update(); renderer.render(scene, camera); requestAnimationFrame(animate);
+}
+animate();
+setTimeout(() => flyTo(focus), 400);
+
+poll(); setInterval(poll, 3000); setInterval(tick, 250);
+</script>
+</body>
+</html>
