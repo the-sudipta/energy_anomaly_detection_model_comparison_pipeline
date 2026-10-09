@@ -190,8 +190,8 @@ def tuning_table(tuning_dir: Path) -> pd.DataFrame | None:
     rows = []
     for path in sorted(tuning_dir.glob("*.json")) if tuning_dir.is_dir() else []:
         result = json.loads(path.read_text(encoding="utf-8"))
-        rows.append({"split": result["split"], "model": result["model"],
-                     "cv_pr_auc_defaults": result["default_cv_pr_auc"], "cv_pr_auc_tuned": result["cv_pr_auc"],
+        rows.append({"split": result["split"], "model": result["model"], "objective": result.get("objective", "PR-AUC"),
+                     "cv_score_defaults": result["default_cv_pr_auc"], "cv_score_tuned": result["cv_pr_auc"],
                      "candidates": len(result["trials"]), "tuning_rows": result["sample_rows"],
                      "chosen_parameters": json.dumps(result["best"], default=str) if result["best"] else "defaults"})
     return pd.DataFrame(rows) if rows else None

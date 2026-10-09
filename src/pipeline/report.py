@@ -78,8 +78,10 @@ def tuning_notes(tables: dict[str, pd.DataFrame], names: dict[str, str]) -> list
     notes = []
     if "tuned_hyperparameters" in tables:
         notes.append("Hyperparameters were tuned separately for every split using only that split's train "
-                     "portion: a stratified subsample, 3-fold stratified cross-validation and PR-AUC as the "
-                     "objective. The original settings were always one of the candidates. Isolation Forest "
+                     "portion: a stratified subsample and 3-fold stratified cross-validation, maximising PR-AUC "
+                     "(F1 at the 0.5 threshold for the Decision Tree, whose coarse leaf probabilities made the "
+                     "best-ranking setting predict worse at 0.5). The original settings were always one of the "
+                     "candidates. Isolation Forest "
                      "never sees labels when fitting; labels only score its candidate settings.")
     effect = tables.get("tuning_effect")
     if effect is not None and len(effect):

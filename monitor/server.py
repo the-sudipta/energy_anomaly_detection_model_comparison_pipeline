@@ -45,7 +45,7 @@ RUN_FAIL = re.compile(r"\[(\w+) \| (\w+)\] failed")
 STARTED = re.compile(r"^Started: (\w+)$")
 FINISHED = re.compile(r"^Finished: (\w+) in (.+)$")
 MATRIX = re.compile(r"Feature matrix: ([\d,]+) x (\d+)")
-TUNE_TRIAL = re.compile(r"\[tune (\w+) \| (\w+)\] trial (\d+)/(\d+) PR-AUC=([\d.]+) (.*)$")
+TUNE_TRIAL = re.compile(r"\[tune (\w+) \| (\w+)\] trial (\d+)/(\d+) (?:PR-AUC|F1)=([\d.]+) (.*)$")
 SPLIT_INFO = re.compile(r"^(split_\w+): train=([\d,]+) .*test=([\d,]+)")
 
 

@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 import numpy as np
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, f1_score
 from sklearn.model_selection import ParameterSampler, StratifiedKFold, train_test_split
 
 from src.data.features import build_imputer
@@ -50,6 +50,19 @@ def candidates(model: str, tuning_cfg: dict[str, Any], seed: int) -> list[dict[s
     return unique
 
 
+def objective_name(model: str, tuning_cfg: dict[str, Any]) -> str:
+    """Name of the tuning objective of a model: "PR-AUC" (default) or "F1".
+
+    Args:
+        model: Model name.
+        tuning_cfg: The ``tuning`` config section.
+
+    Returns:
+        The objective label used in logs and results.
+    """
+    return "F1" if (tuning_cfg.get("objective") or {}).get(model) == "f1" else "PR-AUC"
+
+
 def tune(X: Any, y: np.ndarray, feature_columns: list[str], train_idx: np.ndarray, model: str,
          config: dict[str, Any], label: str) -> dict[str, Any]:
     """Search the best hyperparameters for one model on one split's train portion.
@@ -76,10 +89,11 @@ def tune(X: Any, y: np.ndarray, feature_columns: list[str], train_idx: np.ndarra
         start = time.perf_counter()
         score = _cv_score(X, y, feature_columns, rows, folds, model, params, config)
         trials.append({"params": params, "cv_pr_auc": score, "seconds": time.perf_counter() - start})
-        _log.info("[tune %s] trial %d/%d PR-AUC=%.4f %s", label, number,
-                  int(cfg["n_iter"].get(model, 10)) + 1, score, params or "(defaults)")
+        _log.info("[tune %s] trial %d/%d %s=%.4f %s", label, number, int(cfg["n_iter"].get(model, 10)) + 1,
+                  objective_name(model, cfg), score, params or "(defaults)")
     best = max(trials, key=lambda t: t["cv_pr_auc"])
-    return {"best": best["params"], "cv_pr_auc": best["cv_pr_auc"], "default_cv_pr_auc": trials[0]["cv_pr_auc"],
+    return {"best": best["params"], "objective": objective_name(model, cfg),
+            "cv_pr_auc": best["cv_pr_auc"], "default_cv_pr_auc": trials[0]["cv_pr_auc"],
             "sample_rows": int(len(rows)), "folds": len(folds), "trials": trials}
 
 
@@ -111,7 +125,10 @@ def _cv_score(X: Any, y: np.ndarray, feature_columns: list[str], rows: np.ndarra
         estimator.set_feature_names(feature_columns)
         try:
             estimator.fit(X_fit, y[fit_rows])
-            scores.append(average_precision_score(y[val_rows], estimator.predict_score(X_val)))
+            if objective_name(model, config["tuning"]) == "F1":
+                scores.append(f1_score(y[val_rows], estimator.predict(X_val), zero_division=0))
+            else:
+                scores.append(average_precision_score(y[val_rows], estimator.predict_score(X_val)))
         except (ValueError, MemoryError) as error:
             _log.warning("Candidate %s failed on a fold: %s", params, error)
             scores.append(0.0)

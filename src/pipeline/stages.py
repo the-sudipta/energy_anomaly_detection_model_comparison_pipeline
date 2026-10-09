@@ -180,7 +180,8 @@ def tuning_key(config: dict[str, Any], paths: ProjectPaths, model: str) -> str:
     """
     cfg = config["tuning"]
     return json.dumps([dataset_signature(paths, config), config["models"].get(model), cfg["spaces"].get(model),
-                       cfg["n_iter"].get(model), cfg["sample_size"].get(model), cfg.get("folds")],
+                       cfg["n_iter"].get(model), cfg["sample_size"].get(model), cfg.get("folds"),
+                       (cfg.get("objective") or {}).get(model, "pr_auc")],
                       sort_keys=True, default=str)
 
 
@@ -211,7 +212,7 @@ def run_tune(config: dict[str, Any], paths: ProjectPaths, options: RunOptions) -
             result = search.tune(data.X, data.y, data.feature_columns, train_idx, model, config, f"{split} | {model}")
             result.update(split=split, model=model, key=key)
             path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
-            _log.info("[tune %s | %s] best CV PR-AUC %.4f (defaults %.4f): %s", split, model,
+            _log.info("[tune %s | %s] best CV %s %.4f (defaults %.4f): %s", split, model, result["objective"],
                       result["cv_pr_auc"], result["default_cv_pr_auc"], result["best"] or "defaults")
 
 

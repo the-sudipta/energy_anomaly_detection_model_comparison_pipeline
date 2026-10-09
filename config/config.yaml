@@ -74,6 +74,12 @@ models:
 tuning:
   enabled: true
   folds: 3
+  # What each search maximises: pr_auc (ranking quality, default) or f1 (F1 of the
+  # model's own predictions at its default threshold). The Decision Tree's leaf
+  # probabilities are coarse, so a setting that ranks better can predict worse at
+  # 0.5; it is therefore tuned directly for F1.
+  objective:
+    decision_tree: f1
   sample_size:
     random_forest: 100000
     isolation_forest: 200000
