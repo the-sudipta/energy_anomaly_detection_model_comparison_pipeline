@@ -79,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     start = time.perf_counter()
     try:
         options = resolve_options(args, config)
+        log.info("Plan: stages=%s models=%s splits=%s", ",".join(stages), ",".join(options.models),
+                 ",".join(options.splits))
         for stage in stages:
             STAGE_FUNCTIONS[stage](config, paths, options)
     except (StageError, ConfigError, FileNotFoundError, ValueError) as error:

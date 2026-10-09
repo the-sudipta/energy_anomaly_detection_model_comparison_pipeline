@@ -35,7 +35,7 @@ STAGES = ("download", "preprocess", "split", "tune", "train_eval", "aggregate", 
 FULL_ROWS = 1_749_494
 # Prior full-data seconds per run at a 30% train share, refined from observed runs.
 PRIOR_SECONDS = {"random_forest": 180.0, "isolation_forest": 45.0, "decision_tree": 25.0, "xgboost": 35.0}
-STAGE_PRIOR = {"download": 2, "preprocess": 90, "split": 30, "tune": 4200, "aggregate": 15, "visualize": 420, "report": 20}
+STAGE_PRIOR = {"download": 2, "preprocess": 40, "split": 15, "tune": 4200, "aggregate": 5, "visualize": 60, "report": 5}
 SCALE_EXPONENT = 1.1
 
 LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),\d+ \| (\w+)\s*\| ([\w.]+) \| (.*)$")
@@ -46,6 +46,7 @@ STARTED = re.compile(r"^Started: (\w+)$")
 FINISHED = re.compile(r"^Finished: (\w+) in (.+)$")
 MATRIX = re.compile(r"Feature matrix: ([\d,]+) x (\d+)")
 TUNE_TRIAL = re.compile(r"\[tune (\w+) \| (\w+)\] trial (\d+)/(\d+) (?:PR-AUC|F1)=([\d.]+) (.*)$")
+PLAN = re.compile(r"^Plan: stages=([\w,]+) models=([\w,]+) splits=([\w,]+)$")
 SPLIT_INFO = re.compile(r"^(split_\w+): train=([\d,]+) .*test=([\d,]+)")
 
 
@@ -79,7 +80,7 @@ def parse_log(path: Path) -> dict[str, Any]:
     Returns:
         Parsed events.
     """
-    state: dict[str, Any] = {"stages": {}, "runs": {}, "events": [], "rows": None, "tuning": {},
+    state: dict[str, Any] = {"stages": {}, "runs": {}, "events": [], "rows": None, "tuning": {}, "plan": None,
                              "splits": {}, "first": None, "last": None, "done": False, "error": None}
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         match = LINE.match(raw)
@@ -102,7 +103,9 @@ def _apply(state: dict[str, Any], stamp: datetime, level: str, message: str) -> 
         level: Log level.
         message: Log message.
     """
-    if m := TUNE_TRIAL.search(message):
+    if m := PLAN.match(message):
+        state["plan"] = {"stages": m.group(1).split(","), "models": m.group(2).split(","), "splits": m.group(3).split(",")}
+    elif m := TUNE_TRIAL.search(message):
         state["tuning"].setdefault(m.group(2), []).append({
             "split": m.group(1), "trial": int(m.group(3)), "of": int(m.group(4)), "pr_auc": float(m.group(5)),
             "params": m.group(6), "time": stamp.isoformat()})
@@ -151,6 +154,12 @@ def build_status() -> dict[str, Any]:
     if log is None:
         return {"state": "idle", "now": now.isoformat(), "message": "No pipeline log found yet."}
     parsed = parse_log(log)
+    if parsed["plan"] is None:
+        parsed["plan"] = _infer_plan(parsed, ratios)
+    plan = parsed["plan"]
+    if plan:
+        models = [m for m in models if m in plan["models"]]
+        ratios = {k: v for k, v in ratios.items() if k in plan["splits"]}
     runs = _run_table(parsed, models, ratios, now)
     stages = _stage_table(parsed, runs, now)
     return _summary(parsed, runs, stages, models, ratios, names, now, log)
@@ -254,7 +263,8 @@ def _stage_table(parsed: dict[str, Any], runs: list[dict[str, Any]], now: dateti
     """
     rows_scale = ((parsed["rows"] or FULL_ROWS) / FULL_ROWS) ** 0.6
     table = []
-    for name in STAGES:
+    planned = parsed["plan"]["stages"] if parsed["plan"] else STAGES
+    for name in [s for s in STAGES if s in planned]:
         info = parsed["stages"].get(name)
         if name == "train_eval":
             estimate = sum(r["estimate"] for r in runs)
@@ -277,6 +287,30 @@ def _stage_table(parsed: dict[str, Any], runs: list[dict[str, Any]], now: dateti
     return table
 
 
+def _infer_plan(parsed: dict[str, Any], ratios: dict[str, float]) -> dict[str, list[str]] | None:
+    """Guess the plan of an older log that predates the "Plan:" line.
+
+    A run that did not start with the first stage was launched for selected
+    stages, and usually for selected models; the models seen in its tuning
+    trials and run results are taken as the plan.
+
+    Args:
+        parsed: Parsed log.
+        ratios: Configured splits.
+
+    Returns:
+        A plan dictionary, or None to assume the full pipeline.
+    """
+    started = list(parsed["stages"])
+    if not started or started[0] == STAGES[0]:
+        return None
+    models = sorted(set(parsed["tuning"]) | {m for _, m in parsed["runs"]})
+    if not models:
+        return None
+    first = STAGES.index(started[0])
+    return {"stages": list(STAGES[first:]), "models": models, "splits": list(ratios)}
+
+
 def _tune_total(parsed: dict[str, Any], now: datetime) -> float:
     """Estimate the whole tune stage from the trials already finished.
 
@@ -292,7 +326,8 @@ def _tune_total(parsed: dict[str, Any], now: datetime) -> float:
         Estimated total seconds for the tune stage.
     """
     start = parsed["stages"]["tune"]["start"]
-    n_splits = len(load_plan()[1])
+    plan = parsed["plan"]
+    n_splits = len(plan["splits"]) if plan else len(load_plan()[1])
     remaining = 0.0
     for ts in parsed["tuning"].values():
         times = sorted(datetime.fromisoformat(t["time"]) for t in ts)
@@ -300,7 +335,7 @@ def _tune_total(parsed: dict[str, Any], now: datetime) -> float:
         rate = statistics.median(gaps) if gaps else 30.0
         per_split = ts[0]["of"]
         remaining += rate * max(per_split * n_splits - len(ts), 0)
-    unseen = [m for m in PRIOR_SECONDS if m not in parsed["tuning"]]
+    unseen = [m for m in (plan["models"] if plan else PRIOR_SECONDS) if m not in parsed["tuning"]]
     remaining += len(unseen) * 11 * n_splits * 40.0
     return (now - start).total_seconds() + remaining
 
