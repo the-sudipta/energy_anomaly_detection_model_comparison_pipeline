@@ -258,6 +258,8 @@ def _stage_table(parsed: dict[str, Any], runs: list[dict[str, Any]], now: dateti
         info = parsed["stages"].get(name)
         if name == "train_eval":
             estimate = sum(r["estimate"] for r in runs)
+        elif name == "tune" and parsed["tuning"]:
+            estimate = _tune_total(parsed, now)
         else:
             estimate = max(STAGE_PRIOR[name] * rows_scale, 3)
         record = {"name": name, "status": "pending", "elapsed": 0.0, "estimate": estimate, "remaining": estimate}
@@ -267,10 +269,40 @@ def _stage_table(parsed: dict[str, Any], runs: list[dict[str, Any]], now: dateti
         elif info:
             spent = (now - info["start"]).total_seconds()
             remaining = sum(r["remaining"] for r in runs) if name == "train_eval" else max(estimate - spent, 5)
+            if name == "tune" and parsed["tuning"]:
+                remaining = max(_tune_total(parsed, now) - spent, 5)
             record.update(status="error" if parsed["error"] else "running", elapsed=spent,
                           remaining=remaining, estimate=spent + remaining)
         table.append(record)
     return table
+
+
+def _tune_total(parsed: dict[str, Any], now: datetime) -> float:
+    """Estimate the whole tune stage from the trials already finished.
+
+    Every (split, model) runs a fixed number of candidates (the ``of`` in
+    "trial i/of"). Each model's observed seconds per trial is applied to its
+    trials still to come, so heavy models (forests, boosting) weigh more.
+
+    Args:
+        parsed: Parsed log with ``tuning`` trials.
+        now: Current time.
+
+    Returns:
+        Estimated total seconds for the tune stage.
+    """
+    start = parsed["stages"]["tune"]["start"]
+    n_splits = len(load_plan()[1])
+    remaining = 0.0
+    for ts in parsed["tuning"].values():
+        times = sorted(datetime.fromisoformat(t["time"]) for t in ts)
+        gaps = [(b - a).total_seconds() for a, b in zip(times, times[1:]) if (b - a).total_seconds() < 900]
+        rate = statistics.median(gaps) if gaps else 30.0
+        per_split = ts[0]["of"]
+        remaining += rate * max(per_split * n_splits - len(ts), 0)
+    unseen = [m for m in PRIOR_SECONDS if m not in parsed["tuning"]]
+    remaining += len(unseen) * 11 * n_splits * 40.0
+    return (now - start).total_seconds() + remaining
 
 
 def _summary(parsed: dict[str, Any], runs: list[dict[str, Any]], stages: list[dict[str, Any]],
