@@ -365,6 +365,24 @@ _digest_state: dict[str, str] = {}
 
 
 def digest_for(model: str) -> dict[str, Any]:
+    """Return a trace for the model, falling back to an earlier run while one is not ready.
+
+    Args:
+        model: Model name.
+
+    Returns:
+        A trace, or ``{"pending": reason}`` if none exists at all.
+    """
+    result = _current_digest(model)
+    if "pending" in result:
+        fallback = digests.latest_cached(model)
+        if fallback:
+            fallback["waiting_for"] = result["pending"]
+            return fallback
+    return result
+
+
+def _current_digest(model: str) -> dict[str, Any]:
     """Return the real-model digest of the latest finished run of a model.
 
     Builds it in a background thread the first time; meanwhile the page gets a

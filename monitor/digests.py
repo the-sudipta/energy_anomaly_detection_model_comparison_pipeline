@@ -393,6 +393,27 @@ def load_cached(run_id: str, signature: str | None) -> dict[str, Any] | None:
     return digest if ok else None
 
 
+def latest_cached(model: str) -> dict[str, Any] | None:
+    """Return the newest cached trace of a model from any earlier run.
+
+    Used while the current pipeline has not finished a run of that model yet.
+
+    Args:
+        model: Model name.
+
+    Returns:
+        The trace, flagged with ``previous=True``, or None.
+    """
+    if not DIGEST_DIR.is_dir():
+        return None
+    for path in sorted(DIGEST_DIR.glob(f"*__{model}.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        digest = json.loads(path.read_text(encoding="utf-8"))
+        if digest.get("version") == DIGEST_VERSION:
+            digest["previous"] = True
+            return digest
+    return None
+
+
 def run_signature(run_id: str) -> str | None:
     """Read the split signature stored in a run's metrics file.
 

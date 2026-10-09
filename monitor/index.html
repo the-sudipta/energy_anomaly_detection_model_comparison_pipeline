@@ -805,7 +805,7 @@ async function pollDigests() {
     try {
       const d = await (await fetch(`${base}?model=${key}`, { cache: "no-store" })).json();
       if (d.pending) { pendingMsg[key] = d.pending; if (!traces[key]) stations[key].wait.userData.set(d.pending.length > 70 ? d.pending.slice(0, 68) + "…" : d.pending, "#85776b"); continue; }
-      if (!traces[key] || traces[key].run !== d.run) { traces[key] = d; stations[key].time = 0; BUILDERS[key](d); }
+      if (!traces[key] || traces[key].run !== d.run || !!traces[key].previous !== !!d.previous) { traces[key] = d; stations[key].time = 0; BUILDERS[key](d); }
     } catch (e) { pendingMsg[key] = "Monitor server not reachable."; }
   }
 }
@@ -813,7 +813,7 @@ async function pollDigests() {
 function showCard() {
   const tr = traces[focus], st = stations[focus];
   $("hud").style.setProperty("--c", MODELS[focus].color);
-  $("hud").innerHTML = tr ? `<span class="dc-live">REAL MODEL · ${splitLbl(tr.split)} split</span><span>${st.hud || ""}</span>`
+  $("hud").innerHTML = tr ? `<span class="dc-live">REAL MODEL · ${splitLbl(tr.split)} split${tr.previous ? " · earlier run" : ""}</span><span>${st.hud || ""}</span>`
     : `<span class="dc-demo">WAITING</span><span>${pendingMsg[focus] || "Loading the real fitted model…"}</span>`;
 }
 
