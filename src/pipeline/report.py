@@ -65,6 +65,30 @@ def key_findings(master: pd.DataFrame, best: pd.DataFrame, effect: pd.DataFrame,
     return findings
 
 
+def tuning_notes(tables: dict[str, pd.DataFrame], names: dict[str, str]) -> list[str]:
+    """Describe the tuning protocol and its effect, when tuning ran.
+
+    Args:
+        tables: Result tables.
+        names: Model display names.
+
+    Returns:
+        Zero or more sentences.
+    """
+    notes = []
+    if "tuned_hyperparameters" in tables:
+        notes.append("Hyperparameters were tuned separately for every split using only that split's train "
+                     "portion: a stratified subsample, 3-fold stratified cross-validation and PR-AUC as the "
+                     "objective. The original settings were always one of the candidates. Isolation Forest "
+                     "never sees labels when fitting; labels only score its candidate settings.")
+    effect = tables.get("tuning_effect")
+    if effect is not None and len(effect):
+        mean = effect.groupby("model")["pr_auc_change"].mean()
+        notes.append("Average test PR-AUC change versus the untuned run: " + ", ".join(
+            f"{names.get(m, m)} {v:+.3f}" for m, v in mean.items()) + ".")
+    return notes
+
+
 def method_notes(config: dict[str, Any], dataset_meta: dict[str, Any]) -> list[str]:
     """Describe the evaluation protocol.
 
@@ -146,6 +170,10 @@ def build_context(
         "tuned_table": table_fragment("tuned_threshold_results", tables["tuned_threshold_results"]),
         "findings": key_findings(tables["master_results"], tables["best_model_per_split"],
                                  tables["train_size_effect"], names),
-        "notes": method_notes(config, dataset_meta),
+        "notes": method_notes(config, dataset_meta) + tuning_notes(tables, names),
+        "tuning_tables": [(title, table_fragment(name, tables[name])) for name, title in
+                          (("tuning_effect", "Effect of tuning on the test portion"),
+                           ("tuned_hyperparameters", "Chosen hyperparameters per split"))
+                          if name in tables],
         "figures": figures,
     }

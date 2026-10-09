@@ -77,6 +77,11 @@
   <p class="sub">Threshold chosen to maximise F1 on each train portion, then applied unchanged to its test portion.</p>
   <div class="card">{{ tuned_table }}</div>
 
+  {% for title, html in tuning_tables %}
+  <h2>{{ title }}</h2>
+  <div class="card">{{ html }}</div>
+  {% endfor %}
+
   <h2>Method notes</h2>
   <div class="card"><ul>{% for item in notes %}<li>{{ item }}</li>{% endfor %}</ul></div>
 

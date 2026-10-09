@@ -175,3 +175,43 @@ def best_mask(frame: pd.DataFrame, metric: str) -> pd.DataFrame:
     numeric = frame.apply(pd.to_numeric, errors="coerce")
     target = numeric.min() if metric in LOWER_IS_BETTER else numeric.max()
     return numeric.eq(target, axis=1)
+
+
+def tuning_table(tuning_dir: Path) -> pd.DataFrame | None:
+    """Summarise the hyperparameter search of every (split, model).
+
+    Args:
+        tuning_dir: Folder of ``<split>__<model>.json`` tuning results.
+
+    Returns:
+        One row per run with CV PR-AUC of the defaults and of the chosen setting,
+        or None when no tuning results exist.
+    """
+    rows = []
+    for path in sorted(tuning_dir.glob("*.json")) if tuning_dir.is_dir() else []:
+        result = json.loads(path.read_text(encoding="utf-8"))
+        rows.append({"split": result["split"], "model": result["model"],
+                     "cv_pr_auc_defaults": result["default_cv_pr_auc"], "cv_pr_auc_tuned": result["cv_pr_auc"],
+                     "candidates": len(result["trials"]), "tuning_rows": result["sample_rows"],
+                     "chosen_parameters": json.dumps(result["best"], default=str) if result["best"] else "defaults"})
+    return pd.DataFrame(rows) if rows else None
+
+
+def tuning_effect(master: pd.DataFrame, baseline_path: Path) -> pd.DataFrame | None:
+    """Compare test F1 / PR-AUC / MCC with an earlier untuned run.
+
+    Args:
+        master: Current master results.
+        baseline_path: ``master_results.csv`` of the untuned run.
+
+    Returns:
+        One row per run with before, after and change, or None without a baseline.
+    """
+    if not baseline_path.is_file():
+        return None
+    before = pd.read_csv(baseline_path)[["split", "model", "f1", "pr_auc", "mcc"]]
+    after = master.astype({"split": str, "model": str})[["split", "model", "f1", "pr_auc", "mcc"]]
+    merged = before.merge(after, on=["split", "model"], suffixes=("_untuned", "_tuned"))
+    for metric in ("f1", "pr_auc", "mcc"):
+        merged[f"{metric}_change"] = merged[f"{metric}_tuned"] - merged[f"{metric}_untuned"]
+    return merged
