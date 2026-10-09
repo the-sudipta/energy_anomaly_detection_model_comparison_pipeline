@@ -413,6 +413,9 @@ function renderStatic() {
   $("followBtn").lastChild.textContent = model ? "Follow live" : "Auto tour";
   document.querySelectorAll(".tab[data-m]").forEach(t => t.classList.toggle("training", t.dataset.m === model));
   renderTimeline(); renderRuns(); renderGantt(); renderFeed(); renderExplain();
+  if (typeof buildTuning === "function" && T.model === focus && !T.d) {
+    const n = ((s.tuning || {})[focus] || []).length; if (n !== tuneShown) { clearWorld(); buildTuning(focus); }
+  }
 }
 
 function renderTimeline() {
@@ -943,11 +946,37 @@ function buildXGB(d) {
    ===================================================================== */
 const BUILDERS = { decision_tree: buildDT, random_forest: buildRF, isolation_forest: buildIF, xgboost: buildXGB };
 const traces = {}, pendingMsg = {};
+/* Live tuning view: shown while a model has no finished fitted model yet. Every column is a real
+   candidate setting that finished cross-validation; height = its CV PR-AUC. */
+let tuneShown = -1;
+function buildTuning(key) {
+  const trials = (status && status.tuning && status.tuning[key]) || [];
+  tuneShown = trials.length;
+  const splits = [...new Set(trials.map(t => t.split))];
+  const best = {}; trials.forEach(t => { if (!best[t.split] || t.pr_auc > best[t.split].pr_auc) best[t.split] = t; });
+  const floor0 = trials.length ? Math.max(0, Math.floor((Math.min(...trials.map(t => t.pr_auc)) - 0.05) * 20) / 20) : 0;
+  const scaleH = (v) => Math.max(0.05, (v - floor0) / Math.max(1 - floor0, 0.1) * 10);
+  trials.forEach((t, i) => {
+    const row = splits.indexOf(t.split), x = -14 + (t.trial - 1) * 1.9, z = -row * 4, h = scaleH(t.pr_auc);
+    const isBest = best[t.split] === t, isDefault = t.trial === 1, isLast = i === trials.length - 1;
+    const col = new THREE.Mesh(new THREE.BoxGeometry(1.2, h, 1.2), mat(isBest ? 0xf2b33d : isDefault ? 0xb9ada0 : MODELS[key].color,
+      { emissive: isLast ? 0xffffff : 0x000000, emissiveIntensity: isLast ? 0.25 : 0 }));
+    col.position.set(x, h / 2 + 0.3, z); col.castShadow = true; world.add(col);
+    col.userData.tip = () => `<b>${splitLbl(t.split)} split · candidate ${t.trial} of ${t.of}</b><br>cross-validated PR-AUC <b>${t.pr_auc.toFixed(4)}</b>${isDefault ? "<br>(the original settings)" : ""}${isBest ? "<br><b>best so far for this split</b>" : ""}<br><span style="font-family:monospace;font-size:.72rem">${t.params}</span>`;
+    const lab = label(t.pr_auc.toFixed(3), isBest ? "#b07a12" : "#5b6773", 3.4, { bare: true }); lab.position.set(x, h + 0.9, z); world.add(lab);
+  });
+  splits.forEach((sp, row) => { const l = label(`${splitLbl(sp)} split`, "#2b2420", 3.6); l.position.set(-18.5, 0.8, -row * 4); world.add(l); });
+  if (trials.length) { const ax = label(`column height: CV PR-AUC from ${floor0.toFixed(2)} (bottom) to 1.00`, "#85776b", 9); ax.position.set(0, -0.6, 3); world.add(ax); }
+  const n = trials.length, last = trials[n - 1];
+  $("capKicker").textContent = `${MODELS[key].name} · live`; $("capTitle").textContent = n ? "Tuning, live" : "Waiting for this model";
+  $("capText").innerHTML = n ? `No ${MODELS[key].name} has finished training in this run yet, so here is what is happening to it right now: every column is a real candidate setting that just finished 3-fold cross-validation on the training portion; its height is the PR-AUC it reached. Grey = the original settings, gold = best so far per split. <b>${n}</b> candidates tested; latest: ${splitLbl(last.split)} #${last.trial} → <b>${last.pr_auc.toFixed(4)}</b>. Hover a column for its settings. The step-by-step model walkthrough appears as soon as the tuned model is trained.`
+    : (pendingMsg[key] || "This model's tuning has not started yet. Its walkthrough appears once it is tuned and trained.");
+  $("srcTag").textContent = ""; $("answer").style.display = "none"; $("chips").innerHTML = ""; $("reading").innerHTML = "";
+  if (!userMoved) flyCam([0, 12, 30 + splits.length * 2], [0, 3, -splits.length * 1.5]);
+}
 function buildModel(key, d, keepTest = false) {
   clearWorld(); userMoved = false;
-  if (!d) { T.model = key; T.d = null; T.chapters = []; $("chips").innerHTML = ""; $("answer").style.display = "none";
-    $("capKicker").textContent = MODELS[key].name; $("capTitle").textContent = "Waiting for the real model";
-    $("capText").textContent = pendingMsg[key] || "Loading the fitted model…"; $("reading").innerHTML = ""; return; }
+  if (!d) { T.model = key; T.d = null; T.chapters = []; buildTuning(key); return; }
   if (!keepTest || T.model !== key) {
     T.test = Math.max(0, d.tests.findIndex(t => t.truth && t.pred));
     if (key === "random_forest") {  // start on the reading the trees disagree about most

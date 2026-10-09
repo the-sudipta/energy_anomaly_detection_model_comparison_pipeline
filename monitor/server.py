@@ -45,6 +45,7 @@ RUN_FAIL = re.compile(r"\[(\w+) \| (\w+)\] failed")
 STARTED = re.compile(r"^Started: (\w+)$")
 FINISHED = re.compile(r"^Finished: (\w+) in (.+)$")
 MATRIX = re.compile(r"Feature matrix: ([\d,]+) x (\d+)")
+TUNE_TRIAL = re.compile(r"\[tune (\w+) \| (\w+)\] trial (\d+)/(\d+) PR-AUC=([\d.]+) (.*)$")
 SPLIT_INFO = re.compile(r"^(split_\w+): train=([\d,]+) .*test=([\d,]+)")
 
 
@@ -78,7 +79,7 @@ def parse_log(path: Path) -> dict[str, Any]:
     Returns:
         Parsed events.
     """
-    state: dict[str, Any] = {"stages": {}, "runs": {}, "events": [], "rows": None,
+    state: dict[str, Any] = {"stages": {}, "runs": {}, "events": [], "rows": None, "tuning": {},
                              "splits": {}, "first": None, "last": None, "done": False, "error": None}
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         match = LINE.match(raw)
@@ -101,7 +102,11 @@ def _apply(state: dict[str, Any], stamp: datetime, level: str, message: str) -> 
         level: Log level.
         message: Log message.
     """
-    if m := STARTED.match(message):
+    if m := TUNE_TRIAL.search(message):
+        state["tuning"].setdefault(m.group(2), []).append({
+            "split": m.group(1), "trial": int(m.group(3)), "of": int(m.group(4)), "pr_auc": float(m.group(5)),
+            "params": m.group(6), "time": stamp.isoformat()})
+    elif m := STARTED.match(message):
         state["stages"][m.group(1)] = {"start": stamp, "end": None}
         state["events"].append((stamp, f"Started stage {m.group(1)}"))
     elif m := FINISHED.match(message):
@@ -307,7 +312,7 @@ def _summary(parsed: dict[str, Any], runs: list[dict[str, Any]], stages: list[di
         "current_stage": active["name"] if active else None,
         "current_run": _jsonable(current) if current else None,
         "activity": _activity(active, current, names, state, sum(r["status"] == "skipped" for r in runs)),
-        "stages": stages, "runs": [_jsonable(r) for r in runs],
+        "stages": stages, "runs": [_jsonable(r) for r in runs], "tuning": parsed["tuning"],
         "events": [{"time": t.isoformat(), "text": text} for t, text in parsed["events"][-12:]][::-1],
     }
 
