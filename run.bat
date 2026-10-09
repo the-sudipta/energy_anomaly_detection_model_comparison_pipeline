@@ -6,6 +6,9 @@ cd /d "%~dp0"
 call "%~dp0setup_env.bat"
 if errorlevel 1 goto :failed
 
+rem Open the live progress monitor in its own minimised window (it also opens the browser).
+start "Benchmark live monitor" /min ".venv\Scripts\python.exe" -m monitor.server
+
 ".venv\Scripts\python.exe" -m src.main --stage all %*
 if errorlevel 1 goto :failed
 
