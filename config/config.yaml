@@ -23,6 +23,16 @@ features:
   use_building_id: false
   rolling_features: false     # per-building 24h rolling stats (causal, past-only window)
   rolling_window_hours: 24
+  drop_constant: true         # drop feature columns with a single value (e.g. year)
+  # Composite keys from train_features.csv that encode building_id; dropped so the
+  # building identity cannot re-enter the model through them.
+  drop_columns:
+    - building_weekday_hour
+    - building_weekday
+    - building_month
+    - building_hour
+    - building_meter
+    - weekday_hour
 
 split:
   mode: stratified_random     # stratified_random | by_building | temporal

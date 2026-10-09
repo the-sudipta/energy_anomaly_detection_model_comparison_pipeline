@@ -14,6 +14,7 @@ _log = get_logger(__name__)
 TRAIN_FILE = "train.csv"
 METADATA_FILE = "building_metadata.csv"
 WEATHER_FILE = "weather_train.csv"
+FEATURES_FILE = "train_features.csv"
 CATEGORY_MAX_UNIQUE_RATIO = 0.05
 
 
@@ -84,21 +85,29 @@ def _looks_categorical(series: pd.Series) -> bool:
 
 def load_raw_tables(
     raw_dir: Path, time_column: str
-) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame | None]:
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame | None]]:
     """Load the labelled training table and the optional side tables.
+
+    The Kaggle release ships ``train_features.csv`` (building, weather and
+    engineered ASHRAE features); the LEAD1.0 release ships separate
+    ``building_metadata.csv`` and ``weather_train.csv``. Whatever exists is used.
 
     Args:
         raw_dir: Folder containing the raw CSV files.
         time_column: Name of the timestamp column.
 
     Returns:
-        ``(train, building_metadata, weather_train)``; side tables are None if absent.
+        ``(train, side_tables)`` where side_tables maps ``"features"``,
+        ``"metadata"`` and ``"weather"`` to a DataFrame or None.
     """
     train = read_csv_compact(raw_dir / TRAIN_FILE, time_column)
     _log.info("Loaded %s: %s rows, columns=%s", TRAIN_FILE, f"{len(train):,}", list(train.columns))
-    metadata = _load_optional(raw_dir / METADATA_FILE, None)
-    weather = _load_optional(raw_dir / WEATHER_FILE, time_column)
-    return train, metadata, weather
+    side_tables = {
+        "features": _load_optional(raw_dir / FEATURES_FILE, time_column),
+        "metadata": _load_optional(raw_dir / METADATA_FILE, None),
+        "weather": _load_optional(raw_dir / WEATHER_FILE, time_column),
+    }
+    return train, side_tables
 
 
 def _load_optional(path: Path, time_column: str | None) -> pd.DataFrame | None:
@@ -112,7 +121,7 @@ def _load_optional(path: Path, time_column: str | None) -> pd.DataFrame | None:
         The DataFrame, or None when the file is missing.
     """
     if not path.is_file():
-        _log.warning("Optional file %s not found; continuing without it.", path.name)
+        _log.info("Optional file %s not found; continuing without it.", path.name)
         return None
     frame = read_csv_compact(path, time_column)
     _log.info("Loaded %s: %s rows, columns=%s", path.name, f"{len(frame):,}", list(frame.columns))
