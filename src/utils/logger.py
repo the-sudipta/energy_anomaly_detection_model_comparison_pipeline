@@ -17,13 +17,13 @@ def setup_logging(log_dir: Path, level: int = logging.INFO) -> logging.Logger:
 
     Args:
         log_dir: Directory that receives ``pipeline_<timestamp>.log``.
-        level: Logging level for both handlers.
+        level: Console logging level; the file always receives DEBUG and above.
 
     Returns:
         The configured project logger.
     """
     logger = logging.getLogger(LOGGER_NAME)
-    logger.setLevel(level)
+    logger.setLevel(logging.DEBUG)
     for handler in list(logger.handlers):
         handler.close()
         logger.removeHandler(handler)
@@ -32,8 +32,11 @@ def setup_logging(log_dir: Path, level: int = logging.INFO) -> logging.Logger:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_handler = logging.FileHandler(log_dir / f"pipeline_{stamp}.log", encoding="utf-8")
     file_handler.setFormatter(logging.Formatter(_FILE_FORMAT))
+    file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
-    logger.addHandler(_console_handler())
+    console = _console_handler()
+    console.setLevel(level)
+    logger.addHandler(console)
     return logger
 
 
