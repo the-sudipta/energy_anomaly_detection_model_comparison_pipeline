@@ -41,6 +41,22 @@ python -m venv .venv
 .venv/bin/python -m src.main --stage all
 ```
 
+## Live progress monitor
+
+While the pipeline runs, open a second terminal and start the monitor:
+
+```powershell
+.\monitor.bat
+```
+
+It opens http://127.0.0.1:8765 with a live view of the run: overall percent
+done, elapsed and remaining time, the local time it will finish, the stage
+timeline, every model x split chunk with its duration and F1, and an animated
+3D scene showing how the model that is training right now works. The monitor
+only reads `outputs/logs`, so it can be opened or closed at any time without
+affecting the run. Estimates recalibrate from the timings measured on your
+machine after every finished chunk.
+
 ## Kaggle credentials
 
 1. Sign in to Kaggle, open the
@@ -110,6 +126,7 @@ src/evaluation/           metrics, aggregation, table export
 src/visualization/        theme and every chart
 src/pipeline/             stages, experiment runner, report
 tests/test_smoke.py       synthetic end-to-end test (pytest)
+monitor/                  live progress page (server + 3D view)
 run.bat / run_stage.bat   Windows launchers
 ```
 
