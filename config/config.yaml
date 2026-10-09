@@ -21,6 +21,7 @@ data:
 
 features:
   use_building_id: false
+  contextual: true            # reading minus the building's typical level per hour/weekday/month
   rolling_features: false     # per-building 24h rolling stats (causal, past-only window)
   rolling_window_hours: 24
   drop_constant: true         # drop feature columns with a single value (e.g. year)
@@ -52,6 +53,7 @@ models:
     n_estimators: 300
     contamination: train_rate   # "train_rate" or a float in (0, 0.5]
     fit_on_normal_only: false
+    feature_set: all            # "all" features or "contextual" (building-deviation features only)
   decision_tree:
     max_depth: null
     min_samples_leaf: 5
@@ -64,6 +66,48 @@ models:
     colsample_bytree: 0.8
     tree_method: hist
     eval_metric: aucpr
+
+# Hyperparameter search, run per split on that split's train portion only
+# (stratified subsample, stratified k-fold CV, scored by PR-AUC). The values
+# under models: above are always tried first, so tuning never loses to them
+# on cross-validation. Set enabled: false to train with the values above.
+tuning:
+  enabled: true
+  folds: 3
+  sample_size:
+    random_forest: 100000
+    isolation_forest: 200000
+    decision_tree: 200000
+    xgboost: 150000
+  n_iter:
+    random_forest: 8
+    isolation_forest: 12
+    decision_tree: 16
+    xgboost: 10
+  spaces:
+    random_forest:
+      max_depth: [null, 20, 30]
+      min_samples_leaf: [1, 2, 5, 10]
+      max_features: [sqrt, 0.3, 0.5]
+      class_weight: [balanced_subsample, null]
+    isolation_forest:
+      n_estimators: [200, 300, 500]
+      max_samples: [256, 1024, 4096]
+      max_features: [0.5, 0.75, 1.0]
+      feature_set: [all, contextual]
+    decision_tree:
+      max_depth: [null, 10, 15, 20, 30]
+      min_samples_leaf: [1, 5, 20, 50, 100]
+      criterion: [gini, entropy]
+      class_weight: [balanced, null]
+    xgboost:
+      n_estimators: [300, 600, 1000]
+      learning_rate: [0.03, 0.05, 0.1]
+      max_depth: [6, 8, 10, 12]
+      subsample: [0.7, 0.8, 1.0]
+      colsample_bytree: [0.6, 0.8, 1.0]
+      min_child_weight: [1, 5, 10]
+      pos_weight_mode: [ratio, sqrt, none]
 
 evaluation:
   default_threshold: 0.5

@@ -30,7 +30,10 @@ class XGBoostModel(BaseAnomalyModel):
         self.scale_pos_weight = 1.0
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> XGBoostModel:
-        """Fit the booster, weighting positives by ``n_neg / n_pos`` of this train portion.
+        """Fit the booster, weighting positives from this train portion's class balance.
+
+        ``pos_weight_mode`` chooses the weight: ``ratio`` (n_neg / n_pos, default),
+        ``sqrt`` (its square root) or ``none`` (1.0).
 
         Args:
             X: Training features.
@@ -39,9 +42,11 @@ class XGBoostModel(BaseAnomalyModel):
         Returns:
             The fitted model.
         """
-        n_pos = int(np.sum(y == 1))
-        self.scale_pos_weight = (len(y) - n_pos) / n_pos if n_pos else 1.0
         params = dict(self.params)
+        mode = params.pop("pos_weight_mode", "ratio")
+        n_pos = int(np.sum(y == 1))
+        ratio = (len(y) - n_pos) / n_pos if n_pos else 1.0
+        self.scale_pos_weight = {"ratio": ratio, "sqrt": float(np.sqrt(ratio)), "none": 1.0}[mode]
         if self.use_gpu:
             params["device"] = "cuda"
         self.estimator = XGBClassifier(

@@ -33,6 +33,13 @@ class BaseAnomalyModel(ABC):
         self.estimator: Any = None
         self.threshold = 0.5
 
+    def set_feature_names(self, names: list[str]) -> None:
+        """Receive the feature names before fitting (used by models that select columns).
+
+        Args:
+            names: Feature names in matrix order.
+        """
+
     @abstractmethod
     def fit(self, X: np.ndarray, y: np.ndarray) -> BaseAnomalyModel:
         """Fit the model on training data.

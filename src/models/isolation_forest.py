@@ -14,6 +14,8 @@ from sklearn.ensemble import IsolationForest
 
 from src.models.base import BaseAnomalyModel
 
+CONTEXT_FEATURES = ("dev_building_hour", "dev_building_weekday", "dev_building_month", "dev_building",
+                    "dev_abs_max", "is_zero_reading", "log_meter_reading", "hour_sin", "hour_cos", "dow_sin", "dow_cos")
 MIN_CONTAMINATION = 1e-4
 MAX_CONTAMINATION = 0.5
 
@@ -35,8 +37,26 @@ class IsolationForestModel(BaseAnomalyModel):
         params = dict(params)
         self.contamination_setting = params.pop("contamination", "train_rate")
         self.fit_on_normal_only = bool(params.pop("fit_on_normal_only", False))
+        self.feature_set = str(params.pop("feature_set", "all"))
         super().__init__(params, seed, n_jobs)
         self.contamination = MIN_CONTAMINATION
+        self.columns: np.ndarray | None = None
+
+    def set_feature_names(self, names: list[str]) -> None:
+        """Choose the input columns: all features, or only the building-context set.
+
+        Args:
+            names: Feature names in matrix order.
+        """
+        if self.feature_set == "contextual":
+            picked = [i for i, name in enumerate(names) if name in CONTEXT_FEATURES]
+            self.columns = np.array(picked) if picked else None
+        else:
+            self.columns = None
+
+    def _view(self, X: np.ndarray) -> np.ndarray:
+        """Return the columns this model uses."""
+        return X if self.columns is None else X[:, self.columns]
 
     def fit(self, X: np.ndarray, y: np.ndarray) -> IsolationForestModel:
         """Fit on the train features without labels.
@@ -53,6 +73,7 @@ class IsolationForestModel(BaseAnomalyModel):
         else:
             rate = float(self.contamination_setting)
         self.contamination = float(np.clip(rate, MIN_CONTAMINATION, MAX_CONTAMINATION))
+        X = self._view(X)
         X_fit = X[y == 0] if self.fit_on_normal_only and np.any(y == 0) else X
         self.estimator = IsolationForest(
             contamination=self.contamination,
@@ -72,7 +93,7 @@ class IsolationForestModel(BaseAnomalyModel):
         Returns:
             Anomaly scores, higher = more anomalous.
         """
-        return -self.estimator.score_samples(X)
+        return -self.estimator.score_samples(self._view(X))
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """Map sklearn's -1 (outlier) / 1 (inlier) to 1 (anomaly) / 0 (normal).
@@ -83,4 +104,4 @@ class IsolationForestModel(BaseAnomalyModel):
         Returns:
             A 1-D int8 array of 0/1 predictions.
         """
-        return (self.estimator.predict(X) == -1).astype(np.int8)
+        return (self.estimator.predict(self._view(X)) == -1).astype(np.int8)
