@@ -57,7 +57,8 @@ def _authenticate(config_dir: Path) -> Any:
     """Authenticate against the Kaggle API using the documented credential order.
 
     Order: ``KAGGLE_USERNAME``/``KAGGLE_KEY`` or ``KAGGLE_API_TOKEN`` environment
-    variables, then ``~/.kaggle/kaggle.json``, then ``config/kaggle.json``.
+    variables, then ``~/.kaggle/access_token``, then ``~/.kaggle/kaggle.json``,
+    then ``config/kaggle.json``.
 
     Args:
         config_dir: Project ``config`` folder.
@@ -72,7 +73,11 @@ def _authenticate(config_dir: Path) -> Any:
         bool(os.environ.get("KAGGLE_USERNAME")) and bool(os.environ.get("KAGGLE_KEY"))
     )
     home_file = Path.home() / ".kaggle" / "kaggle.json"
+    home_token = Path.home() / ".kaggle" / "access_token"
     project_file = config_dir / "kaggle.json"
+    if not has_env and home_token.is_file():
+        os.environ["KAGGLE_API_TOKEN"] = home_token.read_text(encoding="utf-8").strip()
+        has_env = True
     if not has_env and not home_file.is_file():
         if not project_file.is_file():
             raise DownloadError(_missing_credentials_message(home_file, project_file))
@@ -100,8 +105,9 @@ def _missing_credentials_message(home_file: Path, project_file: Path) -> str:
     return (
         "No Kaggle credentials found.\n"
         "  1. Sign in at https://www.kaggle.com, open Settings > API and click "
-        "'Create New Token' to download kaggle.json.\n"
-        f"  2. Put it at {home_file} (recommended) or {project_file}.\n"
+        "'Create New Token'.\n"
+        f"  2. Save the token text to {home_file.with_name('access_token')}, or put a legacy\n"
+        f"     kaggle.json at {home_file} or {project_file}.\n"
         "  Alternatively set KAGGLE_USERNAME and KAGGLE_KEY (or KAGGLE_API_TOKEN)."
     )
 
