@@ -63,6 +63,9 @@ def small_config() -> dict:
     config["models"]["xgboost"]["n_estimators"] = 20
     config["plots"]["dpi"] = 60
     config["plots"]["formats"] = ["png"]
+    config["tuning"]["n_iter"] = {name: 1 for name in config["models"]}
+    config["tuning"]["spaces"]["random_forest"] = {"min_samples_leaf": [1, 5]}
+    config["tuning"]["spaces"]["xgboost"] = {"max_depth": [3, 4]}
     return config
 
 
@@ -82,7 +85,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> tuple[dict, object]:
     setup_logging(paths.logs)
     make_synthetic_raw(paths.raw)
     options = RunOptions(models=list(config["models"]), splits=list(config["split"]["ratios"]))
-    for stage in ("preprocess", "split", "train_eval", "aggregate"):
+    for stage in ("preprocess", "split", "tune", "train_eval", "aggregate"):
         stages.STAGE_FUNCTIONS[stage](config, paths, options)
     return config, paths
 
@@ -128,3 +131,12 @@ def test_isolation_forest_is_unsupervised_by_contract(project: tuple) -> None:
     row = master[master["model"] == "isolation_forest"].iloc[0]
     assert not bool(row["supervised"])
     assert pd.isna(row["log_loss"])
+
+
+def test_tuning_results_are_used(project: tuple) -> None:
+    """Each run has a tuning result, and train_eval records the parameters it applied."""
+    config, paths = project
+    expected = len(config["models"]) * len(config["split"]["ratios"])
+    assert len(list((paths.outputs / "tuning").glob("*.json"))) == expected
+    master = pd.read_csv(paths.tables / "master_results.csv")
+    assert "tuned_params" in master.columns

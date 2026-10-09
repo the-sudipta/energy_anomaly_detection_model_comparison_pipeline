@@ -30,11 +30,11 @@ from monitor import digests
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = Path(__file__).with_name("index.html")
 PORT = 8765
-STAGES = ("download", "preprocess", "split", "train_eval", "aggregate", "visualize", "report")
+STAGES = ("download", "preprocess", "split", "tune", "train_eval", "aggregate", "visualize", "report")
 FULL_ROWS = 1_749_494
 # Prior full-data seconds per run at a 30% train share, refined from observed runs.
 PRIOR_SECONDS = {"random_forest": 180.0, "isolation_forest": 45.0, "decision_tree": 25.0, "xgboost": 35.0}
-STAGE_PRIOR = {"download": 2, "preprocess": 90, "split": 30, "aggregate": 15, "visualize": 420, "report": 20}
+STAGE_PRIOR = {"download": 2, "preprocess": 90, "split": 30, "tune": 4200, "aggregate": 15, "visualize": 420, "report": 20}
 SCALE_EXPONENT = 1.1
 
 LINE = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d),\d+ \| (\w+)\s*\| ([\w.]+) \| (.*)$")
@@ -340,6 +340,7 @@ def _activity(stage: dict[str, Any] | None, run: dict[str, Any] | None, names: d
         "download": "Checking for the Kaggle files in data/raw.",
         "preprocess": "Merging train.csv with train_features.csv and engineering features.",
         "split": "Drawing the five stratified train/test splits.",
+        "tune": "Searching hyperparameters with 3-fold cross-validation inside each split's train portion.",
         "train_eval": "Preparing the next model run.",
         "aggregate": "Building the comparison tables (CSV, XLSX, HTML, Markdown).",
         "visualize": "Rendering heatmaps, curves, confusion matrices and the dashboard.",

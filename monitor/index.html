@@ -115,7 +115,7 @@
   .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 34px 4px 14px; }
   .section-title h2 { margin: 0; font-size: 1.45rem; }
   .section-title span { color: var(--muted); font-size: .88rem; }
-  .timeline { padding: 22px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .timeline { padding: 22px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
   .st { padding: 14px; border-radius: 16px; background: var(--bg2); position: relative; overflow: hidden; transition: transform .3s; }
   .st:hover { transform: translateY(-3px); }
   .st .n { font-weight: 700; font-size: .9rem; }
@@ -295,7 +295,7 @@ const MODELS = {
     steps: ["Start from a constant prediction", "Fit a tree to the current errors", "Add it with learning rate 0.08", "Repeat 400 rounds, weighting rare anomalies"] },
 };
 const ORDER = ["random_forest", "isolation_forest", "decision_tree", "xgboost"];
-const STAGE_LABEL = { download: "Download", preprocess: "Preprocess", split: "Split", train_eval: "Train & evaluate", aggregate: "Aggregate", visualize: "Visualize", report: "Report" };
+const STAGE_LABEL = { download: "Download", preprocess: "Preprocess", split: "Split", tune: "Tune", train_eval: "Train & evaluate", aggregate: "Aggregate", visualize: "Visualize", report: "Report" };
 
 /* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
@@ -383,7 +383,7 @@ function renderTimeline() {
     const t = st.status === "done" ? `took ${fmtShort(st.elapsed)}` : st.status === "running" ? `${fmtShort(st.elapsed)} · ≈ ${fmtShort(st.remaining)} left` : `≈ ${fmtShort(st.estimate)}`;
     return `<div class="st ${st.status}"><div class="num">${i + 1}</div><div class="n">${STAGE_LABEL[st.name]}</div><div class="s">${st.status}</div><div class="t">${t}</div></div>`;
   }).join("");
-  $("stageInfo").textContent = `${s.stages.filter(x => x.status === "done").length} of 7 complete`;
+  $("stageInfo").textContent = `${s.stages.filter(x => x.status === "done").length} of ${s.stages.length} complete`;
 }
 
 function renderRuns() {
