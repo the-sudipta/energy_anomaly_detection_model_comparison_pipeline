@@ -69,12 +69,15 @@ def run_all(
     for split, model in tqdm(runs, desc="Experiments", unit="run"):
         identifier = run_id(split, model)
         train_idx, test_idx, signature = load_split(paths.splits / f"{split}.npz")
+        tuned = config.get("_tuned", {}).get(split, {}).get(model, {})
+        signature = f"{signature}|params={json.dumps(tuned, sort_keys=True, default=str)}"
         if not force and _is_done(paths, identifier, signature):
             _log.info("[%s | %s] already done, skipping (use --force to re-run).", split, model)
             continue
         try:
             result = run_one(data, config, paths, split, model, (train_idx, test_idx))
             result["signature"] = signature
+            result["tuned_params"] = tuned
             _save_metrics(paths, identifier, result)
             _log.info("[%s | %s] F1=%.3f PR-AUC=%.3f MCC=%.3f fit=%.1fs", split, model,
                       result["f1"], result["pr_auc"], result["mcc"], result["fit_seconds"])
@@ -110,7 +113,8 @@ def run_one(
     X_train = imputer.fit_transform(data.X.iloc[train_idx]).astype(np.float32)
     X_test = imputer.transform(data.X.iloc[test_idx]).astype(np.float32)
     y_train, y_test = data.y[train_idx], data.y[test_idx]
-    model = build_model(model_name, config)
+    model = build_model(model_name, config, split)
+    model.set_feature_names(data.feature_columns)
     start = time.perf_counter()
     model.fit(X_train, y_train)
     fit_seconds = time.perf_counter() - start

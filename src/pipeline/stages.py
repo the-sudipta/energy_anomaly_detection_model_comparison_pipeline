@@ -19,6 +19,7 @@ from src.evaluation import aggregate, export
 from src.pipeline import report
 from src.pipeline.runner import ExperimentData, run_all
 from src.splitting.splitter import load_split, make_split, save_split, split_summary
+from src.tuning import search
 from src.utils.logger import get_logger
 from src.utils.paths import ProjectPaths
 from src.utils.timer import timed_stage
@@ -30,7 +31,7 @@ from src.visualization.style import build_context
 
 _log = get_logger(__name__)
 
-STAGES = ("download", "preprocess", "split", "train_eval", "aggregate", "visualize", "report")
+STAGES = ("download", "preprocess", "split", "tune", "train_eval", "aggregate", "visualize", "report")
 TEMPLATE = Path(__file__).parent / "templates" / "report.html.j2"
 LIBRARIES = ("numpy", "pandas", "pyarrow", "scikit-learn", "xgboost", "matplotlib", "seaborn")
 
@@ -90,13 +91,16 @@ def run_preprocess(config: dict[str, Any], paths: ProjectPaths, options: RunOpti
         options: CLI options (``sample`` and ``force`` are used).
     """
     _require(paths.raw / "train.csv", "download")
+    fingerprint = json.dumps(config["features"], sort_keys=True)
     if paths.dataset.is_file() and not options.force:
-        existing = load_dataset_metadata(paths.dataset).get("sample_fraction")
-        if existing == options.sample:
+        existing = load_dataset_metadata(paths.dataset)
+        same = existing.get("sample_fraction") == options.sample and existing.get("features_config") == fingerprint
+        if same:
             _log.info("Processed dataset already up to date, skipping (use --force to rebuild).")
             return
-        _log.info("Sample fraction changed (%s -> %s); rebuilding.", existing, options.sample)
+        _log.info("Sample fraction or feature settings changed; rebuilding the dataset.")
     frame, meta = build_processed_dataset(paths.raw, config, options.sample)
+    meta["features_config"] = fingerprint
     save_dataset(frame, meta, paths.dataset)
 
 
@@ -111,8 +115,8 @@ def dataset_signature(paths: ProjectPaths, config: dict[str, Any]) -> str:
         A short signature string.
     """
     meta = load_dataset_metadata(paths.dataset)
-    return f"rows={meta['n_rows']}|sample={meta['sample_fraction']}|mode={config['split']['mode']}" \
-           f"|seed={config['seed']}"
+    return f"rows={meta['n_rows']}|features={meta['n_features']}|sample={meta['sample_fraction']}" \
+           f"|mode={config['split']['mode']}|seed={config['seed']}"
 
 
 @timed_stage("split")
@@ -163,6 +167,74 @@ def load_experiment_data(config: dict[str, Any], paths: ProjectPaths) -> Experim
     return ExperimentData(X=frame, y=y, feature_columns=features)
 
 
+def tuning_key(config: dict[str, Any], paths: ProjectPaths, model: str) -> str:
+    """Identify the data and search space a tuning result belongs to.
+
+    Args:
+        config: Parsed configuration dictionary.
+        paths: Project paths.
+        model: Model name.
+
+    Returns:
+        A string that changes when the dataset, base settings or search space change.
+    """
+    cfg = config["tuning"]
+    return json.dumps([dataset_signature(paths, config), config["models"].get(model), cfg["spaces"].get(model),
+                       cfg["n_iter"].get(model), cfg["sample_size"].get(model), cfg.get("folds")],
+                      sort_keys=True, default=str)
+
+
+@timed_stage("tune")
+def run_tune(config: dict[str, Any], paths: ProjectPaths, options: RunOptions) -> None:
+    """Search hyperparameters for every selected (split, model) on its train portion.
+
+    Args:
+        config: Parsed configuration dictionary.
+        paths: Project paths.
+        options: CLI options (``models``, ``splits``, ``force``).
+    """
+    if not config.get("tuning", {}).get("enabled"):
+        _log.info("Tuning disabled in config.yaml; models use the values under models:.")
+        return
+    _require(paths.dataset, "preprocess")
+    out_dir = paths.outputs / "tuning"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    data = None
+    for split in options.splits:
+        train_idx, _, _ = load_split(paths.splits / f"{split}.npz")
+        for model in options.models:
+            path, key = out_dir / f"{split}__{model}.json", tuning_key(config, paths, model)
+            if path.is_file() and not options.force and json.loads(path.read_text(encoding="utf-8")).get("key") == key:
+                _log.info("[tune %s | %s] already tuned, skipping.", split, model)
+                continue
+            data = data or load_experiment_data(config, paths)
+            result = search.tune(data.X, data.y, data.feature_columns, train_idx, model, config, f"{split} | {model}")
+            result.update(split=split, model=model, key=key)
+            path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+            _log.info("[tune %s | %s] best CV PR-AUC %.4f (defaults %.4f): %s", split, model,
+                      result["cv_pr_auc"], result["default_cv_pr_auc"], result["best"] or "defaults")
+
+
+def load_tuned(config: dict[str, Any], paths: ProjectPaths) -> dict[str, dict[str, dict[str, Any]]]:
+    """Read the best parameters found by the tune stage that match the current data and space.
+
+    Args:
+        config: Parsed configuration dictionary.
+        paths: Project paths.
+
+    Returns:
+        ``{split: {model: params}}``; empty when tuning is disabled.
+    """
+    tuned: dict[str, dict[str, dict[str, Any]]] = {}
+    if not config.get("tuning", {}).get("enabled"):
+        return tuned
+    for path in (paths.outputs / "tuning").glob("*.json"):
+        result = json.loads(path.read_text(encoding="utf-8"))
+        if result.get("key") == tuning_key(config, paths, result["model"]):
+            tuned.setdefault(result["split"], {})[result["model"]] = result["best"]
+    return tuned
+
+
 @timed_stage("train_eval")
 def run_experiments(config: dict[str, Any], paths: ProjectPaths, options: RunOptions) -> None:
     """Train and evaluate every selected (model, split) pair.
@@ -178,6 +250,7 @@ def run_experiments(config: dict[str, Any], paths: ProjectPaths, options: RunOpt
     _require(paths.dataset, "preprocess")
     for split in options.splits:
         _require(paths.splits / f"{split}.npz", "split")
+    config = {**config, "_tuned": load_tuned(config, paths)}
     write_run_info(config, paths, options)
     data = load_experiment_data(config, paths)
     runs = [(split, model) for split in options.splits for model in options.models]
@@ -203,7 +276,7 @@ def write_run_info(config: dict[str, Any], paths: ProjectPaths, options: RunOpti
     info = {
         "python": sys.version.split()[0], "platform": platform.platform(), "libraries": versions,
         "seed": config["seed"], "split_mode": config["split"]["mode"], "sample_fraction": options.sample,
-        "models": options.models, "splits": options.splits,
+        "models": options.models, "splits": options.splits, "tuned_parameters": config.get("_tuned", {}),
     }
     paths.run_info.write_text(json.dumps(info, indent=2), encoding="utf-8")
 
@@ -234,8 +307,29 @@ def run_aggregate(config: dict[str, Any], paths: ProjectPaths, options: RunOptio
     summary_path = paths.splits / "split_summary.csv"
     summary = pd.read_csv(summary_path) if summary_path.is_file() else None
     tables = aggregate.build_tables(master, summary)
+    tables.update(extra_tables(master, paths))
     export.write_all(tables, paths.tables)
     export.print_compact(tables["master_results"])
+
+
+def extra_tables(master: pd.DataFrame, paths: ProjectPaths) -> dict[str, pd.DataFrame]:
+    """Tuning summary and before/after comparison, when the inputs exist.
+
+    Args:
+        master: Master results table.
+        paths: Project paths.
+
+    Returns:
+        Zero, one or two extra tables keyed by name.
+    """
+    extra = {}
+    tuned = aggregate.tuning_table(paths.outputs / "tuning")
+    if tuned is not None:
+        extra["tuned_hyperparameters"] = tuned
+    effect = aggregate.tuning_effect(master, paths.outputs / "baseline_untuned" / "master_results.csv")
+    if effect is not None:
+        extra["tuning_effect"] = effect
+    return extra
 
 
 @timed_stage("visualize")
@@ -282,7 +376,9 @@ def run_report(config: dict[str, Any], paths: ProjectPaths, options: RunOptions)
     """
     _require(paths.tables / "master_results.csv", "aggregate")
     _require(paths.figures / "00_dashboard.png", "visualize")
-    tables = aggregate.build_tables(_master(config, paths), pd.read_csv(paths.splits / "split_summary.csv"))
+    master = _master(config, paths)
+    tables = aggregate.build_tables(master, pd.read_csv(paths.splits / "split_summary.csv"))
+    tables.update(extra_tables(master, paths))
     context = report.build_context(tables, config, load_dataset_metadata(paths.dataset), paths.figures)
     report.render_report(context, TEMPLATE, paths.report)
     _log.info("Report written to %s (%.1f MB)", paths.report, paths.report.stat().st_size / 1e6)
@@ -292,6 +388,7 @@ STAGE_FUNCTIONS = {
     "download": stage_download,
     "preprocess": run_preprocess,
     "split": run_split,
+    "tune": run_tune,
     "train_eval": run_experiments,
     "aggregate": run_aggregate,
     "visualize": run_visualize,
