@@ -13,6 +13,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import statistics
@@ -29,7 +30,7 @@ from monitor import digests
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = Path(__file__).with_name("index.html")
-PORT = 8765
+PORT = int(os.environ.get("MONITOR_PORT", "8765"))
 STAGES = ("download", "preprocess", "split", "tune", "train_eval", "aggregate", "visualize", "report")
 FULL_ROWS = 1_749_494
 # Prior full-data seconds per run at a 30% train share, refined from observed runs.
@@ -456,7 +457,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:  # keep the page alive on unexpected data
                 payload = {"pending": f"Could not read the model: {error}"}
             self._send(json.dumps(payload).encode("utf-8"), "application/json")
-        elif self.path in ("/", "/index.html"):
+        elif self.path.split("?")[0] in ("/", "/index.html"):
             self._send(PAGE.read_bytes(), "text/html; charset=utf-8")
         else:
             self.send_error(404)
