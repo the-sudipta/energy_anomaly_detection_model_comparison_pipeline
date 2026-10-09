@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Anomaly Benchmark Report</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --ink: #1d2733; --muted: #5b6773; --line: #e3e6ea;
+    --accent: #1f6f78; --best-bg: #d7efe9; --best-ink: #0e5e55; --head: #1f3b4d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11161b; --card: #182028; --ink: #e6eaee; --muted: #9aa7b3; --line: #2a3540;
+      --accent: #5cc3c9; --best-bg: #144a46; --best-ink: #b8f0e6; --head: #24465a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  h1 { font-size: 2.3rem; line-height: 1.15; margin: 0 0 10px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.35rem; margin: 48px 0 16px; letter-spacing: -0.01em; }
+  h3 { font-size: 1rem; margin: 22px 0 8px; color: var(--muted); font-weight: 600; }
+  .sub { color: var(--muted); margin: 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-top: 26px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .stat b { display: block; font-size: 1.55rem; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 0.85rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; overflow-x: auto; }
+  ul { padding-left: 1.2rem; } li { margin: 6px 0; }
+  table { border-collapse: collapse; font-size: 0.86rem; width: 100%; }
+  th { background: var(--head); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.best { background: var(--best-bg); color: var(--best-ink); font-weight: 700; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  figure { margin: 0 0 28px; }
+  figure img { width: 100%; height: auto; background: #fff; border-radius: 12px; border: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+  footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Energy anomaly detection: model &times; split benchmark</h1>
+    <p class="sub">Random Forest, Isolation Forest, Decision Tree and XGBoost on the LEAD hourly meter readings, each trained on five independent train/test splits.</p>
+    <div class="stats">
+      <div class="stat"><b>{{ "{:,}".format(dataset.n_rows) }}</b><span>labelled readings</span></div>
+      <div class="stat"><b>{{ "%.2f"|format(100 * dataset.anomaly_rate) }}%</b><span>anomaly rate</span></div>
+      <div class="stat"><b>{{ dataset.n_features }}</b><span>features</span></div>
+      <div class="stat"><b>{{ n_runs }}</b><span>model &times; split runs</span></div>
+    </div>
+  </header>
+
+  <h2>Key findings</h2>
+  <div class="card"><ul>{% for item in findings %}<li>{{ item }}</li>{% endfor %}</ul></div>
+
+  <h2>Headline results (default threshold)</h2>
+  <p class="sub">Rows are models, columns are train/test splits. The best value in each column is highlighted.</p>
+  <div class="grid2">
+  {% for title, html in headline_tables %}
+    <div class="card"><h3>{{ title }}</h3>{{ html }}</div>
+  {% endfor %}
+  </div>
+
+  <h2>Data splits</h2>
+  <div class="card">{{ split_table }}</div>
+
+  <h2>Figures</h2>
+  {% for title, uri in figures %}
+  <figure><img src="{{ uri }}" alt="{{ title }}" loading="lazy"><figcaption>{{ title }}</figcaption></figure>
+  {% endfor %}
+
+  <h2>Tuned-threshold variant</h2>
+  <p class="sub">Threshold chosen to maximise F1 on each train portion, then applied unchanged to its test portion.</p>
+  <div class="card">{{ tuned_table }}</div>
+
+  <h2>Method notes</h2>
+  <div class="card"><ul>{% for item in notes %}<li>{{ item }}</li>{% endfor %}</ul></div>
+
+  <footer>Generated {{ generated }}.</footer>
+</main>
+</body>
+</html>
