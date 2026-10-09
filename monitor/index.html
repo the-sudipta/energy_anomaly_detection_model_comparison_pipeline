@@ -77,7 +77,7 @@
 
   /* 3D */
   .stage-wrap { display: grid; grid-template-columns: 1fr 340px; gap: 22px; margin-bottom: 22px; }
-  .scene { position: relative; height: 560px; overflow: hidden; padding: 0; }
+  .scene { position: relative; height: 620px; overflow: hidden; padding: 0; }
   .scene canvas { display: block; width: 100%; height: 100%; border-radius: var(--radius); }
   .scene .tabs { position: absolute; left: 18px; top: 18px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 2; }
   .tab { border: 1px solid var(--line); background: rgba(255,255,255,.85); color: var(--ink); padding: 8px 14px; border-radius: 999px; cursor: pointer; font: 600 .84rem Inter, sans-serif; display: inline-flex; gap: 8px; align-items: center; transition: all .25s; }
@@ -89,6 +89,14 @@
   .tab:not(.active).training .live { background: var(--c); color: #fff; }
   .scene .follow { position: absolute; right: 18px; top: 18px; z-index: 2; }
   .scene .hint { position: absolute; left: 20px; bottom: 16px; color: var(--muted); font-size: .8rem; z-index: 2; }
+  .data-card { position: absolute; left: 18px; right: 18px; bottom: 40px; z-index: 2; background: rgba(255,255,255,.9); backdrop-filter: blur(10px);
+    border: 1px solid var(--line); border-left: 4px solid var(--c, var(--rf)); border-radius: 16px; padding: 12px 16px; font-size: .86rem; box-shadow: 0 14px 30px -20px rgba(60,40,20,.4); }
+  .data-card:empty { display: none; }
+  .dc-top { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: .76rem; margin-bottom: 4px; }
+  .dc-live, .dc-demo { font-weight: 700; letter-spacing: .08em; padding: 2px 8px; border-radius: 99px; font-size: .68rem; }
+  .dc-live { background: var(--c); color: #fff; } .dc-demo { background: var(--bg2); color: var(--muted); }
+  .dc-title { font-weight: 600; margin-bottom: 2px; }
+  .dc-body { color: #4d433b; line-height: 1.5; }
   .explain { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
   .explain h2 { margin: 0; font-size: 1.55rem; color: var(--c); }
   .explain .tag { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--c); background: color-mix(in srgb, var(--c) 12%, #fff); padding: 4px 10px; border-radius: 99px; }
@@ -231,7 +239,8 @@
     <div class="card scene" id="scene">
       <div class="tabs" id="tabs"></div>
       <div class="follow"><button class="tab active" id="followBtn" style="--c:#2b2420"><i></i>Follow live</button></div>
-      <div class="hint">Drag to orbit &middot; Ctrl + scroll to zoom &middot; the highlighted model is the one training now</div>
+      <div class="hint">Drag to orbit &middot; Ctrl + scroll to zoom</div>
+      <div class="data-card" id="dataCard"></div>
     </div>
     <div class="card explain" id="explain"></div>
   </section>
@@ -425,7 +434,7 @@ function setFocus(m, force) {
   if (m === focus && !force) return;
   focus = m;
   document.querySelectorAll(".tab[data-m]").forEach(t => t.classList.toggle("active", t.dataset.m === m));
-  flyTo(m); renderExplain();
+  flyTo(m); renderExplain(); if (typeof showCard === "function") showCard();
 }
 
 /* ---------- ring ticks ---------- */
@@ -586,6 +595,175 @@ function makeParticles(g, n, color) {
 
 buildRF(); buildIF(); buildDT(); buildXGB();
 
+/* ---------- data-driven stations (real fitted models) ---------- */
+const digestsLoaded = {}, cards = {};
+const RED = new THREE.Color(0xc4524a), GREEN = new THREE.Color(0x6fa287);
+const truthTxt = (y) => y ? "<b style='color:#c4524a'>true anomaly</b>" : "<b style='color:#3f8f6b'>true normal</b>";
+const short = (n) => n.length > 22 ? n.slice(0, 21) + "…" : n;
+
+function clearStation(key) {
+  const g = stations[key].g;
+  [...g.children].slice(2).forEach(o => { g.remove(o); o.traverse(x => { x.geometry?.dispose(); if (x.material?.map) x.material.map.dispose(); x.material?.dispose?.(); }); });
+  return g;
+}
+
+function textSprite(text, color, w = 6, size = 44) {
+  const cv = document.createElement("canvas"); cv.width = 1024; cv.height = 160; const ctx = cv.getContext("2d");
+  ctx.font = `600 ${size}px Inter, sans-serif`; const tw = Math.min(ctx.measureText(text).width + 60, 1020);
+  ctx.fillStyle = "rgba(255,255,255,0.92)"; ctx.beginPath(); ctx.roundRect((1024 - tw) / 2, 30, tw, 100, 50); ctx.fill();
+  ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, 512, 82);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  sp.scale.set(w, w * 160 / 1024, 1); return sp;
+}
+
+const cycle = (t, k, period) => { const speed = 0.45 + 0.9 * k; return t * speed / period; };
+
+function dataDT(d) {
+  const g = clearStation("decision_tree"), c = new THREE.Color(MODELS.decision_tree.color);
+  const bySlot = Object.fromEntries(d.nodes.map(n => [n.slot, n])), meshes = {}, edges = [];
+  const pos = (slot) => { const depth = Math.floor(Math.log2(slot + 1)), idx = slot - (2 ** depth - 1);
+    return new THREE.Vector3(((idx + 0.5) / 2 ** depth - 0.5) * 15, 8.4 - depth * 2.3, 0); };
+  for (const n of d.nodes) {
+    const p = pos(n.slot), share = n.anomaly_share;
+    const m = n.leaf ? new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3 + 1.4 * Math.log10(1 + n.samples) / 6, 0.8), mat(GREEN.clone().lerp(RED, share)))
+                     : new THREE.Mesh(new THREE.SphereGeometry(0.4, 20, 20), mat(0xffffff));
+    m.position.copy(p); if (n.leaf) m.position.y -= 0.2; m.castShadow = true; g.add(m); meshes[n.slot] = m;
+    if (!n.leaf && n.depth < 2) { const lab = textSprite(`${short(n.feature)} ≤ ${n.threshold.toFixed(2)}`, "#8a4f17", 4.2, 40); lab.position.copy(p).add(new THREE.Vector3(0, 0.75, 0.3)); g.add(lab); }
+    if (n.slot > 0) { const parent = Math.floor((n.slot - 1) / 2);
+      if (meshes[parent] || bySlot[parent]) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([pos(parent), p]), new THREE.LineBasicMaterial({ color: 0xcdbfae }));
+        g.add(l); edges.push({ l, from: parent, to: n.slot }); } }
+  }
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 16), mat(c, { emissive: c, emissiveIntensity: 0.9 })); g.add(ball);
+  let shown = -1;
+  stations.decision_tree.update = (t, k) => {
+    const cyc = cycle(t, k, 4.5), i = Math.floor(cyc) % d.samples.length, f = cyc % 1, s = d.samples[i];
+    const steps = s.path.length - 1, p = Math.min(f * 1.25, 1) * steps, seg = Math.min(Math.floor(p), Math.max(steps - 1, 0));
+    const a = pos(s.path[seg]), b = pos(s.path[Math.min(seg + 1, steps)]);
+    ball.position.lerpVectors(a, b, steps ? p - seg : 0); ball.position.z = 0.65;
+    ball.material.color.set(s.truth ? RED : GREEN); ball.material.emissive.set(s.truth ? RED : GREEN);
+    for (const slot in meshes) { const on = s.path.slice(0, seg + 2).includes(+slot); const mm = meshes[slot].material;
+      mm.emissive = new THREE.Color(on ? c : 0x000000); mm.emissiveIntensity = on ? 0.55 : 0; }
+    edges.forEach(e => e.l.material.color.set(s.path.includes(e.from) && s.path.includes(e.to) && s.path.indexOf(e.to) <= seg + 1 ? c : 0xcdbfae));
+    g.rotation.y = Math.sin(t * 0.25) * 0.25;
+    if (i !== shown) { shown = i;
+      const rule = s.path.slice(0, -1).map((sl, j) => { const n = bySlot[sl]; return `${short(n.feature)} ${s.path[j + 1] === 2 * sl + 1 ? "≤" : ">"} ${n.threshold.toFixed(2)}`; }).join(" → ");
+      setCard("decision_tree", `Real reading ${i + 1}/${d.samples.length} · ${truthTxt(s.truth)}`,
+        `Path: ${rule}<br>Reaches a leaf after <b>${s.depth}</b> questions (tree depth ${d.tree_depth}, ${d.n_leaves.toLocaleString()} leaves). Leaf score <b>${s.score.toFixed(2)}</b> → predicted ${s.score >= 0.5 ? "anomaly" : "normal"} ${(s.score >= 0.5) === !!s.truth ? "✓" : "✗"}`); }
+  };
+}
+
+function dataRF(d) {
+  const g = clearStation("random_forest"), c = new THREE.Color(MODELS.random_forest.color), trees = [];
+  const maxDepth = Math.max(...d.trees.map(t => t.depth)), maxLeaves = Math.max(...d.trees.map(t => t.leaves));
+  d.trees.forEach((info, i) => {
+    const a = i / d.trees.length * Math.PI * 2, t = new THREE.Group(), h = 0.6 + 1.4 * info.depth / maxDepth, w = 0.6 + 0.6 * Math.log(info.leaves) / Math.log(maxLeaves);
+    t.position.set(Math.cos(a) * 5.3, 0.5, Math.sin(a) * 5.3);
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.6, 8), mat(0x8a6a4f)); trunk.position.y = 0.8; trunk.castShadow = true; t.add(trunk);
+    const cones = [];
+    for (let k = 0; k < 3; k++) { const cone = new THREE.Mesh(new THREE.ConeGeometry(w * (1.1 - k * 0.25), 1.3 * h, 9), mat(c.clone(), { flatShading: true }));
+      cone.position.y = 1.9 + k * 0.7 * h; cone.castShadow = true; t.add(cone); cones.push(cone); }
+    const tag = textSprite(`depth ${info.depth}`, "#5b6773", 2.4, 46); tag.position.y = 4.6 * h + 0.4; t.add(tag);
+    t.userData.cones = cones; g.add(t); trees.push(t);
+  });
+  const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 2), mat(c, { emissive: c, emissiveIntensity: 0.4, flatShading: true })); orb.position.y = 7.4; g.add(orb);
+  const particles = makeParticles(g, d.trees.length * 4, c);
+  let shown = -1;
+  stations.random_forest.update = (t, k) => {
+    const cyc = cycle(t, k, 4), i = Math.floor(cyc) % d.samples.length, f = cyc % 1, s = d.samples[i];
+    trees.forEach((tr, j) => { const vote = s.votes[j], col = GREEN.clone().lerp(RED, vote), lit = f > 0.45;
+      tr.userData.cones.forEach(cn => { cn.material.color.copy(lit ? col : c); cn.material.emissive = lit ? col : new THREE.Color(0); cn.material.emissiveIntensity = lit ? 0.35 : 0; }); });
+    const orbCol = GREEN.clone().lerp(RED, s.score); orb.material.color.copy(f > 0.75 ? orbCol : c); orb.material.emissive.copy(f > 0.75 ? orbCol : c);
+    orb.rotation.y = t * 0.6;
+    particles.forEach((p, j) => { const tree = trees[j % trees.length].position, ph = Math.min(1, f * 2.2 + (j % 4) * 0.03);
+      if (f < 0.45) p.position.set(tree.x * ph, 0.9 + Math.sin(ph * Math.PI) * 1.5, tree.z * ph);
+      else { const u = Math.min(1, (f - 0.45) / 0.3); p.position.set(tree.x * (1 - u), 4 + u * 3.4, tree.z * (1 - u)); }
+      p.material.color.copy(s.truth ? RED : GREEN); });
+    if (i !== shown) { shown = i; const yes = s.votes.filter(v => v >= 0.5).length;
+      setCard("random_forest", `Real reading ${i + 1}/${d.samples.length} · ${truthTxt(s.truth)}`,
+        `<b>${yes} of ${s.votes.length}</b> trees shown vote anomaly (real per-tree P: ${s.votes.map(v => v.toFixed(2)).join(", ")}). Averaged over all <b>${d.n_trees}</b> trees the forest score is <b>${s.score.toFixed(2)}</b> → ${s.score >= 0.5 ? "anomaly" : "normal"} ${(s.score >= 0.5) === !!s.truth ? "✓" : "✗"}<br>Top features: ${d.top_features.slice(0, 3).map(x => short(x.name)).join(", ")}`); }
+  };
+}
+
+function dataIF(d) {
+  const g = clearStation("isolation_forest"), c = new THREE.Color(MODELS.isolation_forest.color), meshes = [];
+  const geo = new THREE.SphereGeometry(1, 12, 12);
+  d.points.forEach((pt, i) => {
+    const r = 0.1 + 0.28 * Math.max(0, (pt.score - 0.35) / 0.35);
+    const m = new THREE.Mesh(geo, mat(pt.truth ? RED : c.clone().offsetHSL(0, -0.1, 0.25)));
+    m.scale.setScalar(Math.max(r, 0.09)); m.position.set(pt.p[0] * 5.5, 3.8 + pt.p[1] * 2.8, pt.p[2] * 5.5); g.add(m); meshes.push(m);
+  });
+  const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.9 }));
+  g.add(box);
+  const cutLabel = textSprite("", "#7d4e77", 3, 46); g.add(cutLabel);
+  let shown = -1, lastCuts = -1;
+  stations.isolation_forest.update = (t, k) => {
+    const cyc = cycle(t, k, 5), hi = d.highlight[Math.floor(cyc) % d.highlight.length], f = cyc % 1, pt = d.points[hi], target = meshes[hi].position;
+    const cuts = Math.min(Math.floor(f * 1.3 * pt.depth), Math.round(pt.depth));
+    const size = 11 * Math.pow(0.78, cuts) + 0.5;
+    box.position.copy(target); box.scale.set(size, size * 0.7, size);
+    meshes.forEach((m, j) => m.material.emissiveIntensity = 0);
+    meshes[hi].material.emissive = new THREE.Color(pt.truth ? RED : c); meshes[hi].material.emissiveIntensity = 0.9;
+    if (cuts !== lastCuts) { lastCuts = cuts; g.remove(cutLabel); cutLabel.material.map.dispose();
+      const s2 = textSprite(`${cuts} cuts`, "#7d4e77", 2.6, 50); cutLabel.material = s2.material; g.add(cutLabel); }
+    cutLabel.position.copy(target).add(new THREE.Vector3(0, size * 0.35 + 0.8, 0));
+    g.rotation.y = t * 0.08;
+    if (hi !== shown) { shown = hi; const flagged = pt.score >= d.threshold;
+      setCard("isolation_forest", `Real reading · ${truthTxt(pt.truth)}`,
+        `Isolated after <b>${pt.depth.toFixed(1)}</b> random cuts on average (sub-samples of ${d.max_samples}). Short paths are suspicious. Score <b>${pt.score.toFixed(3)}</b> vs threshold ${d.threshold.toFixed(3)} → ${flagged ? "flagged as anomaly" : "treated as normal"} ${flagged === !!pt.truth ? "✓" : "✗"}<br>Cloud: ${d.points.length} real test readings placed by PCA; red = true anomalies, size = anomaly score.`); }
+  };
+}
+
+function dataXGB(d) {
+  const g = clearStation("xgboost"), c = new THREE.Color(MODELS.xgboost.color), bars = [], glyphs = [];
+  const maxLoss = Math.max(...d.curve.map(x => x.logloss)), n = d.curve.length;
+  d.curve.forEach((pt, i) => {
+    const x = -7 + i * (14 / (n - 1 || 1));
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1, 1.1), mat(new THREE.Color(0xd9822b).lerp(c, i / n))); bar.position.set(x, 0.5, 2.4); bar.castShadow = true; g.add(bar); bars.push(bar);
+    const lab = textSprite(`${pt.round} · ${pt.logloss.toFixed(3)}`, "#4a6fa5", 2.8, 46); lab.position.set(x, 0.9 + 4.2 * pt.logloss / maxLoss + 0.6, 2.4); g.add(lab);
+    const gl = new THREE.Group(); gl.position.set(x, 0.5, -2.6);
+    const count = Math.min(6, 1 + Math.round(Math.log2(pt.round)));
+    for (let j = 0; j < count; j++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.6, 6), mat(c)); s.position.set(((j % 3) - 1) * 0.55, 0.4 + Math.floor(j / 3) * 0.75, 0); gl.add(s); }
+    g.add(gl); glyphs.push(gl);
+  });
+  let shown = -1;
+  stations.xgboost.update = (t, k) => {
+    const cyc = cycle(t, k, 1.6), step = cyc % (n + 2), cur = Math.min(Math.floor(step), n - 1);
+    bars.forEach((b, i) => { const v = THREE.MathUtils.clamp(step - i, 0, 1), h = 4.2 * d.curve[i].logloss / maxLoss;
+      b.scale.y = Math.max(0.02, h * v); b.position.y = 0.5 + b.scale.y / 2; });
+    glyphs.forEach((gl, i) => { const v = THREE.MathUtils.clamp(step - i, 0, 1); gl.scale.setScalar(0.001 + v); });
+    if (cur !== shown) { shown = cur; const p = d.curve[cur];
+      setCard("xgboost", `After ${p.round} of ${d.rounds_total} boosting rounds`,
+        `Real test log-loss <b>${p.logloss.toFixed(3)}</b> (started at ${d.curve[0].logloss.toFixed(3)}). Mean P(anomaly): <b style='color:#c4524a'>${p.anomaly_mean.toFixed(2)}</b> for true anomalies vs <b style='color:#3f8f6b'>${p.normal_mean.toFixed(2)}</b> for normal readings.<br>Bars = loss at each checkpoint · scale_pos_weight ${d.scale_pos_weight.toFixed(1)} · top gain: ${d.top_features.slice(0, 3).map(x => short(x.name)).join(", ")}`); }
+  };
+}
+
+const DATA_BUILDERS = { decision_tree: dataDT, random_forest: dataRF, isolation_forest: dataIF, xgboost: dataXGB };
+
+function setCard(key, title, body) { cards[key] = { title, body }; if (key === focus) showCard(); }
+function showCard() {
+  const el = $("dataCard"), card = cards[focus], d = digestsLoaded[focus];
+  el.style.setProperty("--c", MODELS[focus].color);
+  if (d && d.run) {
+    el.innerHTML = `<div class="dc-top"><span class="dc-live">REAL DATA</span><span>${MODELS[focus].name} · fitted on ${splitLbl(d.split)} split</span></div>` +
+      (card ? `<div class="dc-title">${card.title}</div><div class="dc-body">${card.body}</div>` : "");
+  } else {
+    el.innerHTML = `<div class="dc-top"><span class="dc-demo">ILLUSTRATION</span><span>${MODELS[focus].name}</span></div><div class="dc-body">${pendingMsg[focus] || "Loading the real fitted model…"}</div>`;
+  }
+}
+const pendingMsg = {};
+
+async function pollDigests() {
+  const base = API.replace("/api/status", "/api/digest");
+  for (const key of ORDER) {
+    try {
+      const d = await (await fetch(`${base}?model=${key}`, { cache: "no-store" })).json();
+      if (d.pending) { pendingMsg[key] = d.pending; continue; }
+      if (!digestsLoaded[key] || digestsLoaded[key].run !== d.run) { digestsLoaded[key] = d; DATA_BUILDERS[key](d); }
+    } catch (e) { pendingMsg[key] = "Monitor server not reachable."; }
+  }
+  showCard();
+}
+
 /* floating label sprites */
 for (const key of ORDER) {
   const cv = document.createElement("canvas"); cv.width = 512; cv.height = 128; const ctx = cv.getContext("2d");
@@ -624,6 +802,7 @@ animate();
 setTimeout(() => flyTo(focus), 400);
 
 poll(); setInterval(poll, 3000); setInterval(tick, 250);
+pollDigests(); setInterval(pollDigests, 15000);
 </script>
 </body>
 </html>

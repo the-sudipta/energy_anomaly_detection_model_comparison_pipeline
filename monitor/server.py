@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import statistics
 import sys
 import webbrowser
@@ -23,6 +24,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from monitor import digests
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = Path(__file__).with_name("index.html")
@@ -351,6 +354,65 @@ def _jsonable(record: dict[str, Any]) -> dict[str, Any]:
     return {k: v.isoformat() if isinstance(v, datetime) else v for k, v in record.items()}
 
 
+_digest_lock = threading.Lock()
+_digest_state: dict[str, str] = {}
+
+
+def digest_for(model: str) -> dict[str, Any]:
+    """Return the real-model digest of the latest finished run of a model.
+
+    Builds it in a background thread the first time; meanwhile the page gets a
+    short ``pending`` explanation.
+
+    Args:
+        model: Model name.
+
+    Returns:
+        The digest, or ``{"pending": reason}``.
+    """
+    status = build_status()
+    if status.get("state") == "idle":
+        return {"pending": "No finished run yet."}
+    done = [r for r in status["runs"] if r["model"] == model and r["status"] == "done"]
+    if not done:
+        return {"pending": "This model has not finished a run yet in the current pipeline."}
+    run = done[-1]
+    run_id = f"{run['split']}__{model}"
+    signature = digests.run_signature(run_id)
+    cached = digests.load_cached(run_id, signature)
+    if cached:
+        return cached
+    training = status.get("current_stage") == "train_eval"
+    allowed, reason = digests.can_build(ROOT / "outputs" / "models" / f"{run_id}.joblib", training)
+    if not allowed:
+        return {"pending": reason, "run": run_id}
+    state = _digest_state.get(run_id, "")
+    if state.startswith("failed"):
+        _digest_state.pop(run_id, None)
+        return {"pending": f"Could not read {run_id} ({state[8:][:160]}); retrying.", "run": run_id}
+    with _digest_lock:
+        if _digest_state.get(run_id) != "building":
+            _digest_state[run_id] = "building"
+            threading.Thread(target=_build, args=(run, model, run_id, signature), daemon=True).start()
+    return {"pending": f"Reading the fitted model of {run['split']} ...", "run": run_id}
+
+
+def _build(run: dict[str, Any], model: str, run_id: str, signature: str | None) -> None:
+    """Build one digest in the background, recording failures for the page.
+
+    Args:
+        run: Run record.
+        model: Model name.
+        run_id: Run identifier.
+        signature: Split signature.
+    """
+    try:
+        digests.build_digest(run["split"], model, signature)
+        _digest_state[run_id] = "done"
+    except Exception as error:  # surfaced to the page, the server keeps running
+        _digest_state[run_id] = f"failed: {error}"
+
+
 class Handler(BaseHTTPRequestHandler):
     """Serves the page and the status endpoint."""
 
@@ -362,6 +424,13 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:  # report parse problems to the page instead of crashing
                 body = json.dumps({"state": "error", "error": f"Monitor error: {error}"}).encode("utf-8")
             self._send(body, "application/json")
+        elif self.path.startswith("/api/digest"):
+            model = self.path.split("model=")[-1].split("&")[0]
+            try:
+                payload = digest_for(model) if model in PRIOR_SECONDS else {"pending": "Unknown model."}
+            except Exception as error:  # keep the page alive on unexpected data
+                payload = {"pending": f"Could not read the model: {error}"}
+            self._send(json.dumps(payload).encode("utf-8"), "application/json")
         elif self.path in ("/", "/index.html"):
             self._send(PAGE.read_bytes(), "text/html; charset=utf-8")
         else:
