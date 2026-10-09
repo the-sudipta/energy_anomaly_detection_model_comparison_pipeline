@@ -80,11 +80,16 @@ tuning:
   # 0.5; it is therefore tuned directly for F1.
   objective:
     decision_tree: f1
+  # Rows of the train portion used for tuning (null = all of them). A single tree's best
+  # depth depends on how much data it is fitted on, so the Decision Tree, which is cheap,
+  # is tuned on the full train portion with one stratified 75/25 hold-out.
   sample_size:
     random_forest: 100000
     isolation_forest: 200000
-    decision_tree: 200000
+    decision_tree: null
     xgboost: 150000
+  folds_per_model:
+    decision_tree: 1
   n_iter:
     random_forest: 8
     isolation_forest: 12

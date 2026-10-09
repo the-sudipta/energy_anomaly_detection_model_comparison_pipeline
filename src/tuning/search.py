@@ -80,10 +80,11 @@ def tune(X: Any, y: np.ndarray, feature_columns: list[str], train_idx: np.ndarra
         ``{"best": params, "cv_pr_auc": score, "default_cv_pr_auc": score, "trials": [...]}``.
     """
     cfg, seed = config["tuning"], config["seed"]
-    size = min(int(cfg["sample_size"].get(model, 150_000)), len(train_idx))
+    limit = cfg["sample_size"].get(model, 150_000)
+    size = len(train_idx) if limit is None else min(int(limit), len(train_idx))
     rows = train_idx if size >= len(train_idx) else train_test_split(
         train_idx, train_size=size, stratify=y[train_idx], random_state=seed)[0]
-    folds = list(StratifiedKFold(int(cfg.get("folds", 3)), shuffle=True, random_state=seed).split(rows, y[rows]))
+    folds = validation_folds(rows, y, int((cfg.get("folds_per_model") or {}).get(model, cfg.get("folds", 3))), seed)
     trials = []
     for number, params in enumerate(candidates(model, cfg, seed), start=1):
         start = time.perf_counter()
@@ -95,6 +96,25 @@ def tune(X: Any, y: np.ndarray, feature_columns: list[str], train_idx: np.ndarra
     return {"best": best["params"], "objective": objective_name(model, cfg),
             "cv_pr_auc": best["cv_pr_auc"], "default_cv_pr_auc": trials[0]["cv_pr_auc"],
             "sample_rows": int(len(rows)), "folds": len(folds), "trials": trials}
+
+
+def validation_folds(rows: np.ndarray, y: np.ndarray, folds: int, seed: int) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Build stratified validation folds; ``folds=1`` means a single 75/25 hold-out.
+
+    Args:
+        rows: Row positions used for tuning.
+        y: Full label array.
+        folds: Number of folds (1 = hold-out).
+        seed: Random seed.
+
+    Returns:
+        ``(fit_positions, validation_positions)`` pairs, positions relative to ``rows``.
+    """
+    positions = np.arange(len(rows))
+    if folds <= 1:
+        fit, val = train_test_split(positions, test_size=0.25, stratify=y[rows], random_state=seed)
+        return [(fit, val)]
+    return list(StratifiedKFold(folds, shuffle=True, random_state=seed).split(positions, y[rows]))
 
 
 def _cv_score(X: Any, y: np.ndarray, feature_columns: list[str], rows: np.ndarray,

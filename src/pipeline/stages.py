@@ -179,10 +179,16 @@ def tuning_key(config: dict[str, Any], paths: ProjectPaths, model: str) -> str:
         A string that changes when the dataset, base settings or search space change.
     """
     cfg = config["tuning"]
-    return json.dumps([dataset_signature(paths, config), config["models"].get(model), cfg["spaces"].get(model),
-                       cfg["n_iter"].get(model), cfg["sample_size"].get(model), cfg.get("folds"),
-                       (cfg.get("objective") or {}).get(model, "pr_auc")],
-                      sort_keys=True, default=str)
+    parts = [dataset_signature(paths, config), config["models"].get(model), cfg["spaces"].get(model),
+             cfg["n_iter"].get(model), cfg["sample_size"].get(model), cfg.get("folds")]
+    # Optional per-model settings join the key only when set, so adding them never
+    # invalidates results of models that do not use them.
+    extra = {"objective": (cfg.get("objective") or {}).get(model),
+             "folds": (cfg.get("folds_per_model") or {}).get(model)}
+    extra = {k: v for k, v in extra.items() if v is not None}
+    if extra:
+        parts.append(extra)
+    return json.dumps(parts, sort_keys=True, default=str)
 
 
 @timed_stage("tune")
