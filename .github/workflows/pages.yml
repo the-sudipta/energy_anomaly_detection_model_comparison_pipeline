@@ -1,0 +1,63 @@
+name: Deploy website
+
+# Rebuilds the public page whenever the page itself, the site builder or the
+# published results change, so pushing new results updates the site by itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "results/**"
+      - "tools/build_site.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the site from results/
+        run: python tools/build_site.py --out _site
+
+      - name: Check the built data
+        run: |
+          python - <<'PY'
+          import json
+          data = json.load(open("_site/data.json", encoding="utf-8"))
+          assert data["results"], "no result rows in data.json"
+          assert data["figures"], "no figures in data.json"
+          print(f"{len(data['results'])} runs, {len(data['figures'])} figures, published {data['published']}")
+          PY
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
