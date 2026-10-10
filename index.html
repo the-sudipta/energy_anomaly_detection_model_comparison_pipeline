@@ -3,593 +3,524 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Energy Anomaly Detective · 4 models, 5 splits, 1.7 million meter readings</title>
-<meta name="description" content="An interactive, plain-language tour of a benchmark that compares Random Forest, Isolation Forest, Decision Tree and XGBoost at spotting anomalous electricity meter readings.">
+<title>Energy Anomaly Detection · Model × Split Comparison on LEAD</title>
+<meta name="description" content="Random Forest, Isolation Forest, Decision Tree and XGBoost compared on the LEAD smart-meter dataset across five train/test splits, with per-split tuning, interactive results and full reproducibility.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Nunito:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #fffaf2; --paper: #ffffff; --ink: #2a2520; --muted: #7a6f65; --line: #efe4d6;
-    --rf: #1f6f78; --if: #7d4e77; --dt: #d9822b; --xgb: #4a6fa5;
-    --sun: #f7b733; --coral: #e4675a; --mint: #57b894; --sky: #6bb7e8; --grape: #9b6fc4;
-    --ok: #2f9e6e; --bad: #d6524a; --r: 24px; --shadow: 0 14px 40px -22px rgba(120, 80, 30, .45);
+    --bg: #fbfaf7; --paper: #ffffff; --ink: #1b2330; --text: #3b4654; --muted: #6c7785; --line: #e6e3dc; --soft: #f4f2ec;
+    --rf: #1f6f78; --if: #7d4e77; --dt: #d9822b; --xgb: #4a6fa5; --accent: #1f6f78; --pos: #c4524a; --neg: #3f8f8a; --ok: #2d8a63;
+    --r: 14px; --shadow: 0 1px 2px rgba(27, 35, 48, .04), 0 12px 32px -18px rgba(27, 35, 48, .22);
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; overflow-x: clip; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 Nunito, system-ui, sans-serif; overflow-x: hidden; }
-  h1, h2, h3 { font-family: Fraunces, Georgia, serif; letter-spacing: -.02em; line-height: 1.12; margin: 0; }
-  h2 { font-size: clamp(1.9rem, 4vw, 2.9rem); }
-  h3 { font-size: 1.3rem; }
-  p { margin: .5em 0; }
-  a { color: var(--rf); font-weight: 700; }
-  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 22px; }
-  section { padding: 84px 0; position: relative; }
-  .kicker { display: inline-flex; gap: 8px; align-items: center; font-weight: 800; font-size: .8rem; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--c, var(--rf)); background: color-mix(in srgb, var(--c, var(--rf)) 12%, #fff); padding: 6px 14px; border-radius: 99px; margin-bottom: 14px; }
-  .lead { font-size: 1.15rem; color: #4f463e; max-width: 760px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { font-family: "Source Serif 4", Georgia, serif; color: var(--ink); letter-spacing: -.015em; line-height: 1.15; margin: 0; font-weight: 600; }
+  h2 { font-size: clamp(1.7rem, 3.2vw, 2.35rem); } h3 { font-size: 1.15rem; }
+  p { margin: .6em 0; } a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .85em; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 76px 0; border-top: 1px solid var(--line); }
+  .eyebrow { font: 600 .74rem Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .eyebrow b { font: 500 .74rem "JetBrains Mono", monospace; color: var(--muted); letter-spacing: 0; }
+  .lead { font-size: 1.08rem; max-width: 760px; color: var(--text); }
   .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 24px; }
-  .grid { display: grid; gap: 20px; } .grid > * { min-width: 0; }
-  .g2 { grid-template-columns: repeat(2, 1fr); } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); }
-  .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: 800 1rem Nunito, sans-serif; padding: 13px 22px; border-radius: 99px;
-    background: var(--ink); color: #fff; text-decoration: none; transition: transform .15s, box-shadow .15s; box-shadow: 0 10px 22px -12px rgba(0,0,0,.6); }
-  .btn:hover { transform: translateY(-2px) scale(1.02); } .btn:active { transform: scale(.98); }
-  .btn.alt { background: #fff; color: var(--ink); border: 2px solid var(--ink); box-shadow: none; }
-  .btn.sm { padding: 8px 15px; font-size: .88rem; }
-  .pill { border: 2px solid var(--line); background: #fff; border-radius: 99px; padding: 7px 15px; font: 700 .9rem Nunito, sans-serif; cursor: pointer; color: var(--ink); transition: all .15s; }
-  .pill:hover { border-color: var(--ink); } .pill.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
-  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s ease; } .reveal.in { opacity: 1; transform: none; }
-  .blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .5; z-index: -1; pointer-events: none; }
+  .grid { display: grid; gap: 18px; } .grid > * { min-width: 0; }
+  .g2 { grid-template-columns: repeat(2, 1fr); } .g3 { grid-template-columns: repeat(3, 1fr); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--ink); cursor: pointer; font: 600 .92rem Inter, sans-serif; padding: 10px 18px; border-radius: 9px;
+    background: var(--ink); color: #fff; text-decoration: none; transition: transform .15s, background .15s; }
+  .btn:hover { transform: translateY(-1px); background: #2a3546; } .btn.ghost { background: transparent; color: var(--ink); } .btn.ghost:hover { background: var(--soft); }
+  .btn.sm { padding: 6px 12px; font-size: .82rem; border-radius: 7px; }
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; background: var(--soft); border-radius: 10px; padding: 4px; }
+  .seg button { border: 0; background: transparent; border-radius: 7px; padding: 7px 13px; font: 500 .86rem Inter, sans-serif; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .seg button:hover { color: var(--ink); } .seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(27, 35, 48, .14); }
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; } .reveal.in { opacity: 1; transform: none; }
+  .note { color: var(--muted); font-size: .88rem; } .num { font-variant-numeric: tabular-nums; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
 
-  /* reading levels */
-  .lv { display: none; } body[data-level="kid"] .lv.kid, body[data-level="student"] .lv.student, body[data-level="expert"] .lv.expert { display: block; }
-  span.lv { display: none; } body[data-level="kid"] span.lv.kid, body[data-level="student"] span.lv.student, body[data-level="expert"] span.lv.expert { display: inline; }
+  nav { position: sticky; top: 0; z-index: 50; background: rgba(251, 250, 247, .9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  nav .in { display: flex; align-items: center; gap: 18px; height: 58px; }
+  nav .brand { font: 600 1rem "Source Serif 4", serif; color: var(--ink); text-decoration: none; white-space: nowrap; display: flex; align-items: center; gap: 10px; }
+  nav .brand i { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--rf), var(--xgb)); }
+  nav .links { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+  nav .links a { color: var(--muted); text-decoration: none; font-weight: 500; font-size: .86rem; padding: 6px 10px; border-radius: 7px; white-space: nowrap; }
+  nav .links a:hover { color: var(--ink); } nav .links a.on { color: var(--ink); background: var(--soft); }
+  #bar { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--accent); }
 
-  /* nav */
-  nav { position: sticky; top: 0; z-index: 50; background: rgba(255, 250, 242, .86); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
-  nav .in { display: flex; align-items: center; gap: 16px; height: 62px; }
-  nav .logo { font: 800 1.1rem Fraunces, serif; display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--ink); white-space: nowrap; }
-  nav .logo i { width: 30px; height: 30px; border-radius: 10px; background: linear-gradient(135deg, var(--sun), var(--coral)); display: grid; place-items: center; font-style: normal; }
-  nav .links { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
-  nav .links a { color: var(--muted); text-decoration: none; font-weight: 700; font-size: .9rem; padding: 6px 11px; border-radius: 99px; white-space: nowrap; }
-  nav .links a:hover, nav .links a.on { background: #fff; color: var(--ink); box-shadow: 0 2px 10px -6px rgba(0,0,0,.4); }
-  #bar { position: absolute; left: 0; bottom: -2px; height: 3px; width: 0; background: linear-gradient(90deg, var(--sun), var(--coral), var(--grape)); border-radius: 3px; }
-  .level { display: flex; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 99px; padding: 4px; }
-  .level button { border: 0; background: none; cursor: pointer; font: 700 .82rem Nunito, sans-serif; padding: 5px 11px; border-radius: 99px; color: var(--muted); }
-  .level button.on { background: var(--sun); color: var(--ink); }
+  .hero { padding: 72px 0 56px; border-top: 0; position: relative; overflow: clip; }
+  .hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(900px 420px at 85% -10%, #e3efee 0%, transparent 62%), radial-gradient(700px 380px at -5% 10%, #f3ead9 0%, transparent 60%); }
+  .hero h1 { font-size: clamp(2.2rem, 5vw, 3.7rem); font-weight: 700; max-width: 900px; }
+  .hero .sub { font-size: 1.15rem; max-width: 780px; margin-top: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: .9rem; margin-top: 16px; }
+  .hero canvas { width: 100%; height: 150px; display: block; margin: 30px 0 0; border-radius: var(--r); background: #fff; border: 1px solid var(--line); }
+  .cap { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 26px; border: 1px solid var(--line); border-radius: var(--r); background: #fff; overflow: hidden; }
+  .kpi { padding: 18px 22px; border-right: 1px solid var(--line); } .kpi:last-child { border-right: 0; }
+  .kpi b { display: block; font: 600 1.9rem "Source Serif 4", serif; color: var(--ink); line-height: 1.15; } .kpi span { font-size: .84rem; color: var(--muted); }
 
-  /* hero */
-  .hero { padding: 70px 0 40px; position: relative; overflow: clip; }
-  .hero h1 { font-size: clamp(2.5rem, 6.4vw, 5rem); font-weight: 800; max-width: 900px; }
-  .hero h1 em { font-style: normal; background: linear-gradient(100deg, var(--coral), var(--sun)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .hero canvas { width: 100%; height: 190px; display: block; margin: 26px 0 8px; border-radius: var(--r); background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow); }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 22px; }
-  .stat { padding: 18px 20px; border-radius: 20px; background: color-mix(in srgb, var(--c) 13%, #fff); border: 1px solid color-mix(in srgb, var(--c) 25%, #fff); }
-  .stat b { display: block; font: 800 2.1rem Fraunces, serif; color: var(--c); line-height: 1.1; }
-  .stat span { font-weight: 700; color: #5a5048; font-size: .92rem; }
+  .finding { border-left: 3px solid var(--c, var(--accent)); padding: 4px 0 4px 16px; } .finding b { color: var(--ink); display: block; font: 600 1.05rem "Source Serif 4", serif; } .finding span { font-size: .93rem; }
+  #anCanvas { width: 100%; height: 260px; display: block; border-radius: 10px; background: #fff; border: 1px solid var(--line); }
+  .units { display: grid; grid-template-columns: repeat(25, 1fr); gap: 4px; max-width: 480px; }
+  .units i { aspect-ratio: 1; border-radius: 2px; background: #dfe3e8; transition: background .5s; } .units i.a { background: var(--pos); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; } .chips span { font: 500 .76rem "JetBrains Mono", monospace; padding: 3px 8px; border-radius: 6px; background: var(--soft); color: var(--text); }
+  .chips span.new { background: #dcefe9; color: #17624a; }
 
-  /* idea */
-  .idea .card { text-align: center; position: relative; overflow: hidden; transition: transform .25s; }
-  .idea .card:hover { transform: translateY(-6px) rotate(-.6deg); }
-  .emoji { font-size: 3rem; line-height: 1; display: block; margin-bottom: 8px; }
-  .step-no { position: absolute; top: 12px; left: 16px; font: 800 1rem Fraunces, serif; color: var(--muted); }
+  .cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; font-size: .86rem; }
+  .cm .h { color: var(--muted); font-weight: 600; text-align: center; padding: 4px; } .cm .s { display: flex; align-items: center; color: var(--muted); font-weight: 600; }
+  .cm .c { border-radius: 10px; padding: 14px 10px; text-align: center; background: var(--soft); transition: background .5s; }
+  .cm .c b { display: block; font: 600 1.25rem "Source Serif 4", serif; color: var(--ink); } .cm .c span { font-size: .76rem; color: var(--muted); }
+  .bar { display: grid; grid-template-columns: 96px 1fr 62px; gap: 10px; align-items: center; margin: 9px 0; font-size: .9rem; }
+  .bar .t { height: 10px; background: var(--soft); border-radius: 10px; overflow: hidden; } .bar .t i { display: block; height: 100%; width: 0; background: var(--c, var(--accent)); border-radius: 10px; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .bar .v { text-align: right; font-weight: 600; color: var(--ink); }
 
-  /* game */
-  #game canvas { width: 100%; height: 300px; border-radius: 18px; background: #fffdf8; border: 2px dashed var(--line); cursor: crosshair; touch-action: none; }
-  .hud { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 14px 0; }
-  .badge { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 7px 14px; font-weight: 800; }
-  #gameMsg { font-weight: 800; font-size: 1.1rem; min-height: 1.7em; }
+  .stages { display: grid; grid-template-columns: repeat(8, 1fr); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #fff; }
+  .stage { padding: 14px 10px; cursor: pointer; border-right: 1px solid var(--line); transition: background .15s; min-width: 0; }
+  .stage:last-child { border-right: 0; } .stage:hover { background: var(--soft); } .stage.on { background: var(--ink); color: #fff; }
+  .stage .n { font: 500 .7rem "JetBrains Mono", monospace; opacity: .6; } .stage .l { font-weight: 600; font-size: .9rem; display: block; } .stage .d { font-size: .76rem; opacity: .7; }
+  pre.log { background: #161d27; color: #d5dce6; border-radius: 10px; padding: 14px 16px; overflow: auto; font: 400 .76rem/1.6 "JetBrains Mono", monospace; max-height: 330px; margin: 14px 0 0; white-space: pre-wrap; word-break: break-word; }
+  pre.log .t { color: #7f8ea3; } pre.log .hl { color: #8fd3c8; } pre.log mark { background: #f2c14e; color: #161d27; border-radius: 2px; }
 
-  /* dots */
-  .dots { display: grid; grid-template-columns: repeat(20, 1fr); gap: 5px; max-width: 520px; }
-  .dots i { aspect-ratio: 1; border-radius: 50%; background: #e7dccd; transition: background .4s, transform .4s; }
-  .dots i.a { background: var(--coral); transform: scale(1.25); } .dots i.hit { background: var(--ok); } .dots i.miss { background: #f1b8b3; } .dots i.fa { background: var(--sun); }
-  .chips { display: flex; flex-wrap: wrap; gap: 7px; } .chips span { font-size: .8rem; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: #f6efe4; }
-  .chips span.new { background: #dff3ea; color: #1d6b4b; }
+  .splitrow { display: grid; grid-template-columns: 62px 1fr; gap: 12px; align-items: center; margin: 9px 0; font-size: .86rem; }
+  .splitbar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; font-weight: 600; font-size: .76rem; color: #fff; }
+  .splitbar div { display: grid; place-items: center; } .splitbar .tr { background: var(--rf); } .splitbar .te { background: #c9d6d7; color: var(--ink); }
+  ol.rules { margin: 0; padding-left: 1.2em; } ol.rules li { margin: 9px 0; } ol.rules b { color: var(--ink); }
 
-  /* trap */
-  .meter { height: 26px; border-radius: 99px; background: #f1e8db; overflow: hidden; position: relative; margin: 6px 0 14px; }
-  .meter i { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--c); transition: width .9s cubic-bezier(.2,.8,.2,1); }
-  .meter b { position: absolute; right: 12px; top: 0; line-height: 26px; font-size: .86rem; }
+  .mtabs { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: var(--r) var(--r) 0 0; overflow: hidden; background: #fff; }
+  .mtab { padding: 14px 16px; cursor: pointer; border-right: 1px solid var(--line); border-top: 3px solid transparent; transition: all .15s; }
+  .mtab:last-child { border-right: 0; } .mtab:hover { background: var(--soft); } .mtab.on { border-top-color: var(--c); }
+  .mtab small { display: block; color: var(--muted); font-size: .74rem; } .mtab b { color: var(--ink); font: 600 1rem "Source Serif 4", serif; } .mtab .s { float: right; font: 600 1rem "Source Serif 4", serif; color: var(--c); }
+  .mpanel { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--r) var(--r); background: #fff; padding: 26px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; font-size: .88rem; } .kv b { color: var(--muted); font-weight: 500; }
+  svg text { font-family: Inter, sans-serif; }
 
-  /* pipeline */
-  .stages { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
-  .stage { min-width: 0; border: 2px solid var(--line); background: #fff; border-radius: 18px; padding: 12px 8px; text-align: center; cursor: pointer; transition: all .2s; font-weight: 800; }
-  .stage:hover { transform: translateY(-4px); } .stage.on { border-color: var(--ink); background: var(--ink); color: #fff; }
-  .stage small { display: block; font-weight: 700; opacity: .7; font-size: .76rem; } .stage .e { font-size: 1.6rem; display: block; }
-  pre.log { background: #26211c; color: #f3e9da; border-radius: 16px; padding: 16px; overflow: auto; font: 400 .78rem/1.55 "JetBrains Mono", monospace; max-height: 340px; margin: 14px 0 0; white-space: pre-wrap; word-break: break-word; }
-  pre.log .t { color: #9fb7c9; } pre.log .hl { color: #ffd479; font-weight: 600; } pre.log mark { background: #f7b733; color: #2a2520; }
+  .rank { display: grid; grid-template-columns: 26px 150px 1fr 70px; gap: 12px; align-items: center; margin: 11px 0; }
+  .rank .p { font: 500 .8rem "JetBrains Mono", monospace; color: var(--muted); } .rank .nm { font-weight: 600; color: var(--ink); }
+  .rank .t { height: 22px; background: var(--soft); border-radius: 5px; overflow: hidden; } .rank .t i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 5px; transition: width .9s cubic-bezier(.2,.8,.2,1); }
+  .rank .v { text-align: right; font: 600 1rem "Source Serif 4", serif; color: var(--ink); }
+  .heat { display: grid; gap: 4px; font-size: .84rem; } .heat .hc { border-radius: 6px; padding: 10px 4px; text-align: center; font-weight: 600; transition: transform .15s; }
+  .heat .hc:hover { transform: scale(1.06); } .heat .hh { color: var(--muted); font-weight: 600; font-size: .76rem; display: grid; place-items: center; text-align: center; }
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; } th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { cursor: pointer; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); position: sticky; top: 0; background: #fff; font-weight: 600; }
+  td:first-child, th:first-child, td:nth-child(2), th:nth-child(2) { text-align: left; } tr:hover td { background: #faf9f5; }
+  .scroll { overflow: auto; max-height: 440px; border-radius: 10px; border: 1px solid var(--line); }
 
-  /* splits */
-  .splitbar { display: flex; height: 34px; border-radius: 12px; overflow: hidden; margin: 8px 0; font-weight: 800; font-size: .85rem; color: #fff; }
-  .splitbar div { display: grid; place-items: center; transition: flex 1s cubic-bezier(.2,.8,.2,1); } .splitbar .tr { background: var(--rf); } .splitbar .te { background: var(--sun); color: var(--ink); }
-  .rules li { margin: 8px 0; }
+  .dumb { display: grid; grid-template-columns: 150px 1fr 190px; gap: 14px; align-items: center; margin: 18px 0; font-size: .9rem; }
+  .dumb .ln { position: relative; height: 18px; } .dumb .ln::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--line); }
+  .dumb .sg { position: absolute; top: 6px; height: 6px; border-radius: 6px; background: var(--c); opacity: .35; }
+  .dumb .pt { position: absolute; top: 2px; width: 14px; height: 14px; border-radius: 50%; transform: translateX(-50%); border: 2px solid var(--c); background: #fff; } .dumb .pt.after { background: var(--c); }
+  .dumb .r { text-align: right; } .delta { font-weight: 600; } .delta.up { color: var(--ok); } .delta.down { color: var(--pos); }
+  .trial { cursor: pointer; }
 
-  /* models */
-  .model { cursor: pointer; border-top: 8px solid var(--c); transition: transform .2s; } .model:hover { transform: translateY(-6px); }
-  .model .tag { font-size: .74rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--c); }
-  .model .score { font: 800 2.2rem Fraunces, serif; color: var(--c); }
-  .modal { position: fixed; inset: 0; background: rgba(42, 37, 32, .55); display: none; place-items: center; z-index: 100; padding: 18px; }
-  .modal.open { display: grid; } .modal .box { background: #fff; border-radius: 28px; max-width: 760px; width: 100%; max-height: 90vh; overflow: auto; padding: 30px; position: relative; }
-  .x { position: absolute; right: 16px; top: 14px; border: 0; background: #f3ebe0; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; font-size: 1.1rem; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: .92rem; } .kv b { color: var(--muted); font-weight: 700; }
-
-  /* leaderboard */
-  .row { display: grid; grid-template-columns: 170px 1fr 74px; gap: 12px; align-items: center; margin: 12px 0; font-weight: 800; }
-  .track { height: 38px; background: #f4ebdf; border-radius: 12px; overflow: hidden; }
-  .track i { display: block; height: 100%; width: 0; border-radius: 12px; background: var(--c); transition: width 1s cubic-bezier(.2,.8,.2,1); }
-  .medal { font-size: 1.3rem; margin-right: 6px; }
-  table { width: 100%; border-collapse: collapse; font-size: .9rem; } th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { cursor: pointer; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); position: sticky; top: 0; background: #fff; }
-  td:first-child, th:first-child, td:nth-child(2), th:nth-child(2) { text-align: left; }
-  td .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; }
-  .scroll { overflow: auto; max-height: 460px; border-radius: 16px; border: 1px solid var(--line); }
-  svg text { font-family: Nunito, sans-serif; }
-
-  /* tuning */
-  .dumb { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; margin: 16px 0; font-weight: 800; }
-  .dumb .ln { position: relative; height: 30px; }
-  .dumb .ln::before { content: ""; position: absolute; left: 0; right: 0; top: 14px; height: 3px; background: #f1e8db; border-radius: 3px; }
-  .dumb .seg { position: absolute; top: 12px; height: 7px; border-radius: 7px; background: var(--c); opacity: .35; transition: all 1s; }
-  .dumb .pt { position: absolute; top: 5px; width: 20px; height: 20px; border-radius: 50%; transform: translateX(-50%); border: 3px solid var(--c); background: #fff; transition: left 1s; }
-  .dumb .pt.after { background: var(--c); } .dumb .lab { position: absolute; top: -16px; transform: translateX(-50%); font-size: .76rem; white-space: nowrap; transition: left 1s; }
-  .trial { transition: r .15s; cursor: pointer; }
-
-  /* gallery */
   .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
-  .gal figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; cursor: zoom-in; transition: transform .2s, box-shadow .2s; }
-  .gal figure:hover { transform: translateY(-5px); box-shadow: var(--shadow); } .gal img { width: 100%; height: 170px; object-fit: cover; object-position: top left; display: block; }
-  .gal figcaption { padding: 10px 14px 14px; font-weight: 800; font-size: .95rem; }
-  #light img { max-width: 100%; max-height: 72vh; border-radius: 14px; display: block; margin: 0 auto; }
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-  .copy { position: relative; } .copy button { position: absolute; right: 10px; top: 10px; }
-  .quiz .opt { display: block; width: 100%; text-align: left; margin: 8px 0; padding: 12px 16px; border-radius: 14px; border: 2px solid var(--line); background: #fff; cursor: pointer; font: 700 1rem Nunito, sans-serif; }
-  .quiz .opt.right { border-color: var(--ok); background: #e3f5ec; } .quiz .opt.wrong { border-color: var(--bad); background: #fbe5e3; }
-  footer { background: #2a2520; color: #e9dfd2; padding: 56px 0; margin-top: 40px; } footer a { color: var(--sun); overflow-wrap: anywhere; }
-  .confetti { position: fixed; top: -12px; width: 10px; height: 14px; z-index: 200; pointer-events: none; animation: fall linear forwards; }
-  @keyframes fall { to { transform: translateY(105vh) rotate(720deg); opacity: .9; } }
-  @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } } .pop { animation: pop .45s; }
+  .gal figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; cursor: zoom-in; transition: transform .2s, box-shadow .2s; }
+  .gal figure:hover { transform: translateY(-3px); box-shadow: var(--shadow); } .gal img { width: 100%; height: 160px; object-fit: cover; object-position: top left; display: block; border-bottom: 1px solid var(--line); }
+  .gal figcaption { padding: 11px 14px 13px; font-size: .88rem; } .gal figcaption b { color: var(--ink); display: block; } .gal figcaption span { color: var(--muted); font-size: .8rem; }
+  .modal { position: fixed; inset: 0; background: rgba(22, 29, 39, .62); display: none; place-items: center; z-index: 100; padding: 18px; } .modal.open { display: grid; }
+  .modal .box { background: #fff; border-radius: 16px; max-width: 1240px; width: 100%; max-height: 92vh; overflow: auto; padding: 24px; position: relative; }
+  .modal img { max-width: 100%; max-height: 72vh; display: block; margin: 12px auto 0; border-radius: 8px; }
+  .x { position: absolute; right: 14px; top: 12px; border: 1px solid var(--line); background: #fff; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; }
+  .copy { position: relative; } .copy button { position: absolute; right: 10px; top: 10px; background: #2a3546; border-color: #2a3546; }
+  input.q { width: 100%; padding: 10px 13px; border-radius: 9px; border: 1px solid var(--line); font: 400 .92rem Inter, sans-serif; background: #fff; }
+  ul.lim { margin: 0; padding-left: 1.1em; } ul.lim li { margin: 10px 0; } ul.lim b { color: var(--ink); }
+  footer { background: #161d27; color: #b9c2ce; padding: 48px 0; font-size: .9rem; } footer a { color: #8fd3c8; overflow-wrap: anywhere; } footer h3 { color: #fff; }
+  ol.refs { padding-left: 1.3em; } ol.refs li { margin: 8px 0; }
 
   @media (max-width: 900px) {
-    .g2, .g3, .g4, .stats { grid-template-columns: 1fr 1fr; } .stages { grid-template-columns: repeat(4, 1fr); }
-    .row, .dumb { grid-template-columns: 110px 1fr 60px; } .dumb { grid-template-columns: 110px 1fr; } nav .links { display: none; } section { padding: 60px 0; }
+    .g2, .g3 { grid-template-columns: 1fr; } .kpis { grid-template-columns: 1fr 1fr; } .kpi:nth-child(2) { border-right: 0; } .kpi:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .stages { grid-template-columns: repeat(4, 1fr); } .stage:nth-child(4) { border-right: 0; } .stage:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+    .mtabs { grid-template-columns: 1fr 1fr; } nav .links { display: none; } section { padding: 56px 0; }
+    .rank { grid-template-columns: 22px 1fr 64px; } .rank .t { grid-column: 1 / -1; order: 5; } .dumb { grid-template-columns: 1fr; gap: 6px; } .dumb .r { text-align: left; }
   }
-  @media (max-width: 560px) {
-    .g2, .g3, .g4 { grid-template-columns: 1fr; } .dots { grid-template-columns: repeat(10, 1fr); }
-    nav .logo span { display: none; } nav .in { justify-content: space-between; } .level button { padding: 5px 9px; font-size: .78rem; }
-    .stages { grid-template-columns: repeat(2, 1fr); } .row { grid-template-columns: 1fr 64px; } .row .track { grid-column: 1 / -1; order: 3; }
-    .dumb { grid-template-columns: 1fr; gap: 22px; } .dumb .lab { font-size: .68rem; } body { font-size: 16px; } .card { padding: 18px; }
-    .hero canvas { height: 130px; } #game canvas { height: 230px; }
-  }
+  @media (max-width: 520px) { .units { grid-template-columns: repeat(20, 1fr); } .stages { grid-template-columns: 1fr 1fr; } .stage:nth-child(even) { border-right: 0; } .stage { border-bottom: 1px solid var(--line); } .card, .mpanel { padding: 18px; } .mpanel table { font-size: .76rem; } }
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .reveal { opacity: 1; transform: none; } }
 </style>
 </head>
-<body data-level="student">
+<body>
 
 <nav><div class="wrap in">
-  <a class="logo" href="#top"><i>⚡</i><span>Energy Anomaly Detective</span></a>
+  <a class="brand" href="#top"><i></i><span>Energy Anomaly Detection</span></a>
   <div class="links" id="links">
-    <a href="#idea">The idea</a><a href="#game">Play</a><a href="#data">Data</a><a href="#trap">The trap</a><a href="#pipeline">Pipeline</a>
-    <a href="#models">Models</a><a href="#results">Results</a><a href="#tuning">Tuning</a><a href="#figures">Figures</a><a href="#proof">Proof</a>
-  </div>
-  <div class="level" title="Choose how the page explains things">
-    <button data-l="kid">🧒 Kid</button><button data-l="student" class="on">🎓 Student</button><button data-l="expert">🔬 Expert</button>
+    <a href="#summary">Summary</a><a href="#task">Task</a><a href="#data">Data</a><a href="#protocol">Evaluation</a><a href="#pipeline">Pipeline</a>
+    <a href="#models">Models</a><a href="#results">Results</a><a href="#tuning">Tuning</a><a href="#figures">Figures</a><a href="#repro">Reproducibility</a><a href="#refs">References</a>
   </div>
 </div><div id="bar"></div></nav>
 
 <header class="hero" id="top"><div class="wrap">
-  <div class="blob" style="width:420px;height:420px;background:#ffe2b0;left:-120px;top:-60px"></div>
-  <div class="blob" style="width:380px;height:380px;background:#cfeee2;right:-80px;top:120px"></div>
-  <span class="kicker" style="--c:var(--coral)">⚡ A machine-learning detective story</span>
-  <h1>Can a computer spot a <em>broken electricity meter</em>?</h1>
-  <p class="lead lv kid">Buildings write down how much electricity they use every hour. Sometimes the number is weird. We taught four computer "detectives" to find the weird ones, then held a fair contest to see who is best.</p>
-  <p class="lead lv student">We trained four classic machine-learning models to flag anomalous hourly meter readings, tested each on five different train/test splits, tuned them, and compared them honestly. Everything below is built from the real results.</p>
-  <p class="lead lv expert">A leakage-controlled benchmark of Random Forest, Isolation Forest, Decision Tree and XGBoost on the LEAD smart-meter dataset: 5 stratified splits × 4 models, per-split hyperparameter search on the train portion, 20+ metrics, reproducible end to end.</p>
-  <canvas id="heroCanvas" aria-label="Animated stream of meter readings with anomalies"></canvas>
-  <div class="stats" id="heroStats"></div>
-  <p style="margin-top:26px;display:flex;gap:12px;flex-wrap:wrap"><a class="btn" href="#game">🕵️ Play detective</a><a class="btn alt" href="#results">🏆 See who won</a></p>
+  <div class="eyebrow">Project page <b id="heroDate"></b></div>
+  <h1>Detecting anomalous smart-meter readings: a model × split comparison</h1>
+  <p class="sub">Four classical machine-learning models are trained and evaluated on the LEAD commercial-building dataset across five train/test splits. Hyperparameters are tuned separately inside each training portion and every result is measured on untouched test data.</p>
+  <div class="meta"><span>Sudipta Kumar Das</span><span>·</span><span id="heroScope"></span><span>·</span><span>MIT licence</span></div>
+  <p style="margin-top:22px;display:flex;gap:10px;flex-wrap:wrap">
+    <a class="btn" href="#results">View results</a><a class="btn ghost" href="https://github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline">Source code</a><a class="btn ghost" href="#repro">Reproduce</a></p>
+  <canvas id="heroCanvas" aria-label="Schematic stream of hourly meter readings with flagged anomalies"></canvas>
+  <div class="cap"><span>Schematic: an hourly load profile with flagged anomalous segments (illustrative, not dataset rows).</span><span><span class="dot" style="background:var(--rf)"></span>reading <span class="dot" style="background:var(--pos);margin-left:10px"></span>anomaly</span></div>
+  <div class="kpis" id="kpis"></div>
 </div></header>
 
-<section id="idea" class="idea"><div class="wrap">
-  <span class="kicker" style="--c:var(--rf)">1 · The idea</span>
-  <h2 class="reveal">What is an "anomaly"?</h2>
-  <p class="lead lv kid reveal">A normal day looks like a gentle hill: quiet at night, busy in the daytime. An anomaly is when the meter suddenly does something silly, like jumping super high or getting stuck at zero.</p>
-  <p class="lead lv student reveal">An anomaly is a reading that does not fit the building's own normal pattern: a spike, a sudden drop, or a meter stuck at one value. It usually means a fault, a leak of energy, or a broken sensor.</p>
-  <p class="lead lv expert reveal">LEAD labels are contextual: a reading is anomalous relative to that building's typical profile for the hour, weekday and season, not relative to the global distribution. That distinction decides which models can work.</p>
-  <div class="grid g3" style="margin-top:28px">
-    <div class="card reveal"><span class="step-no">1</span><span class="emoji">🏢</span><h3>200 buildings</h3><p>Offices, schools, homes and more. Each one has an electricity meter.</p></div>
-    <div class="card reveal"><span class="step-no">2</span><span class="emoji">⏱️</span><h3>One number every hour</h3><p>For a whole year. That adds up to <b id="ideaRows">1.7 million</b> readings.</p></div>
-    <div class="card reveal"><span class="step-no">3</span><span class="emoji">🚨</span><h3>About 2 in 100 are odd</h3><p>Experts marked them. The models must learn to find them without being told.</p></div>
-  </div>
+<section id="summary"><div class="wrap">
+  <div class="eyebrow">Summary <b>01</b></div>
+  <h2 class="reveal">Results at a glance</h2>
+  <p class="lead reveal">Statements below are computed directly from the published result tables.</p>
+  <div class="grid g2" id="findingList" style="margin-top:22px"></div>
 </div></section>
 
-<section id="game" style="background:linear-gradient(180deg,#fff3dd,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--sun)">2 · Your turn</span>
-  <h2 class="reveal">You be the detective</h2>
-  <p class="lead reveal">This is one week of a building's electricity use. One part is wrong. <b>Click or tap where it looks odd.</b></p>
-  <div class="card reveal" style="margin-top:20px">
-    <div class="hud"><span class="badge">Round <span id="gRound">1</span>/5</span><span class="badge">Score <span id="gScore">0</span></span><span class="badge">⏱ <span id="gTime">0.0</span>s</span>
-      <button class="btn sm alt" id="gHint">💡 Hint</button><button class="btn sm" id="gNext" style="display:none">Next ▶</button><span id="gameMsg"></span></div>
-    <canvas id="gameCanvas"></canvas>
-    <p style="color:var(--muted);font-size:.86rem;margin:10px 0 0">These curves are drawn by this page to show what anomalies look like. They are illustrations, not rows from the dataset.</p>
+<section id="task"><div class="wrap">
+  <div class="eyebrow">Task <b>02</b></div>
+  <h2 class="reveal">What the models are asked to detect</h2>
+  <p class="lead reveal">Each building reports one electricity reading per hour, and each reading is labelled normal or anomalous. The task is binary classification of single readings. Select a type to see the kind of deviation involved, drawn on a typical weekly profile.</p>
+  <div class="card reveal" style="margin-top:22px">
+    <div class="seg" id="anSeg"></div>
+    <canvas id="anCanvas" style="margin-top:16px"></canvas>
+    <p class="note" id="anText" style="margin-top:12px"></p>
   </div>
-  <p class="lead reveal" id="gameVs" style="margin-top:18px"></p>
 </div></section>
 
 <section id="data"><div class="wrap">
-  <span class="kicker" style="--c:var(--xgb)">3 · The data</span>
-  <h2 class="reveal">Rare needles in a big haystack</h2>
+  <div class="eyebrow">Dataset <b>03</b></div>
+  <h2 class="reveal">LEAD: hourly readings from 200 buildings</h2>
   <div class="grid g2" style="margin-top:24px;align-items:start">
     <div class="card reveal">
-      <h3>Out of 400 readings…</h3><p id="rateTxt" class="lead"></p>
-      <div class="dots" id="rateDots"></div>
-      <p style="color:var(--muted);font-size:.9rem">Each dot is a reading. Red dots are anomalies. This imbalance is the reason "accuracy" can fool you (next section).</p>
+      <h3>Class balance</h3><p id="rateTxt"></p>
+      <div class="units" id="units"></div>
+      <p class="note">500 readings drawn to scale; anomalies in red.</p>
     </div>
     <div class="card reveal">
-      <h3><span id="nFeat">60</span> clues per reading</h3>
-      <p class="lv kid">For every reading the computer also knows things like the time, the weather and how big the building is.</p>
-      <p class="lv student">Each reading comes with building details, weather, calendar features, and the building's usual level. We added six new clues (green) that say how far a reading is from that building's own normal.</p>
-      <p class="lv expert">Kaggle's <code>train_features.csv</code> (metadata, weather, lags, ASHRAE-winner target encodings) plus engineered deviation features: log reading minus the building's typical log reading per hour / weekday / month, their max absolute value and a zero-reading flag. Composite keys that encode <code>building_id</code> are dropped.</p>
+      <h3><span id="nFeat"></span> input features</h3>
+      <p>Building metadata, weather, calendar encodings and each building's typical consumption level come from the competition's feature file. Six engineered features (highlighted) express how far a reading is from its own building's typical level. The building identifier and composite keys derived from it are removed.</p>
       <div class="chips" id="featChips"></div>
-      <p style="margin-top:14px"><button class="btn sm alt" id="featMore">Show all features</button></p>
+      <p style="margin-top:12px"><button class="btn sm ghost" id="featMore">Show all features</button></p>
     </div>
   </div>
 </div></section>
 
-<section id="trap" style="background:linear-gradient(180deg,#eef7f3,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--mint)">4 · The accuracy trap</span>
-  <h2 class="reveal">A lazy detective can score <span id="lazyAcc">98</span>%</h2>
-  <p class="lead lv kid reveal">Imagine a detective who always says "nothing is wrong". Almost everything really is fine, so they are right almost every time, but they never catch a single problem! That is why we need smarter scores.</p>
-  <p class="lead lv student reveal">A model that always answers "normal" is right about 98% of the time and catches zero anomalies. So we judge models on <b>precision</b> (when it raises an alarm, is it real?), <b>recall</b> (how many real anomalies it catches) and <b>F1</b> (both together).</p>
-  <p class="lead lv expert reveal">With a ~2.1% positive rate, accuracy is dominated by true negatives. Headline metrics are F1, PR-AUC, MCC, precision and recall; accuracy is reported only to show the gap.</p>
+<section id="protocol"><div class="wrap">
+  <div class="eyebrow">Evaluation <b>04</b></div>
+  <h2 class="reveal">How the models are scored</h2>
+  <p class="lead reveal">Choose a classifier and a split. The confusion matrix and metrics are the real test-set counts. The majority-class baseline predicts "normal" for every reading and shows why accuracy alone is not used to rank the models.</p>
   <div class="card reveal" style="margin-top:22px">
-    <div class="pills" id="trapPills"></div>
-    <div class="grid g2" style="margin-top:18px;align-items:start">
-      <div>
-        <b>Accuracy</b><div class="meter" style="--c:#b9ada0"><i id="mAcc"></i><b id="tAcc"></b></div>
-        <b>Precision</b> <span style="color:var(--muted)">of 100 alarms, how many are real</span><div class="meter" style="--c:var(--xgb)"><i id="mPre"></i><b id="tPre"></b></div>
-        <b>Recall</b> <span style="color:var(--muted)">of 100 real anomalies, how many are caught</span><div class="meter" style="--c:var(--mint)"><i id="mRec"></i><b id="tRec"></b></div>
-        <b>F1</b> <span style="color:var(--muted)">the balance of both</span><div class="meter" style="--c:var(--coral)"><i id="mF1"></i><b id="tF1"></b></div>
-      </div>
-      <div><b>100 real anomalies:</b> <span style="color:var(--ok)">● caught</span> <span style="color:#e39a94">● missed</span>
-        <div class="dots" id="trapDots" style="margin-top:10px"></div><p id="trapNote" style="font-weight:700;margin-top:12px"></p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="seg" id="cmModel"></div><div class="seg" id="cmSplit"></div></div>
+    <div class="grid g2" style="margin-top:20px;align-items:center">
+      <div><div class="cm">
+        <div></div><div class="h">Predicted normal</div><div class="h">Predicted anomaly</div>
+        <div class="s">Actual<br>normal</div><div class="c" id="cTN"><b></b><span>true negatives</span></div><div class="c" id="cFP"><b></b><span>false alarms</span></div>
+        <div class="s">Actual<br>anomaly</div><div class="c" id="cFN"><b></b><span>missed anomalies</span></div><div class="c" id="cTP"><b></b><span>detected anomalies</span></div>
+      </div><p class="note" id="cmNote" style="margin-top:12px"></p></div>
+      <div id="cmBars"></div>
     </div>
+  </div>
+  <div class="grid g2" style="margin-top:18px;align-items:start">
+    <div class="card reveal"><h3>Five independent stratified splits</h3><p class="note" id="splitNote"></p><div id="splitBars" style="margin-top:8px"></div></div>
+    <div class="card reveal"><h3>Safeguards against data leakage</h3><ol class="rules" id="rules"></ol></div>
   </div>
 </div></section>
 
 <section id="pipeline"><div class="wrap">
-  <span class="kicker" style="--c:var(--grape)">5 · How it was built</span>
-  <h2 class="reveal">One command, eight steps</h2>
-  <p class="lead reveal">The whole experiment is a pipeline. Click a step to see what it does, how long it really took, and the <b>actual log lines</b> it printed.</p>
-  <div class="stages reveal" id="stages" style="margin-top:24px"></div>
-  <div class="card reveal" style="margin-top:16px"><h3 id="stTitle"></h3><p id="stText"></p><p id="stTime" style="font-weight:800;color:var(--grape)"></p><pre class="log" id="stLog"></pre></div>
-</div></section>
-
-<section id="fair" style="background:linear-gradient(180deg,#eef3fb,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--xgb)">6 · A fair contest</span>
-  <h2 class="reveal">No peeking at the answers</h2>
-  <div class="grid g2" style="margin-top:22px;align-items:start">
-    <div class="card reveal"><h3>Five ways to share out the data</h3>
-      <p>Each model studies the <b style="color:var(--rf)">train</b> part, then is graded only on the <b style="color:#b07a12">test</b> part it has never seen.</p>
-      <div id="splitBars"></div><p style="color:var(--muted);font-size:.9rem" id="splitNote"></p></div>
-    <div class="card reveal"><h3>The rules every model followed</h3><ul class="rules" id="rules"></ul></div>
-  </div>
+  <div class="eyebrow">Implementation <b>05</b></div>
+  <h2 class="reveal">An eight-stage pipeline</h2>
+  <p class="lead reveal">One command runs everything; each stage can also run alone and skips work that is already done. Select a stage for its role, its measured duration and the log lines it produced.</p>
+  <div class="stages reveal" id="stages" style="margin-top:22px"></div>
+  <div class="card reveal" style="margin-top:14px"><h3 id="stTitle"></h3><p id="stText"></p><p class="note" id="stTime"></p><pre class="log" id="stLog"></pre></div>
 </div></section>
 
 <section id="models"><div class="wrap">
-  <span class="kicker" style="--c:var(--dt)">7 · The four detectives</span>
-  <h2 class="reveal">Meet the models</h2>
-  <p class="lead reveal">Click a card to see how it thinks and the exact settings it ended up with.</p>
-  <div class="grid g4" id="modelCards" style="margin-top:24px"></div>
+  <div class="eyebrow">Models <b>06</b></div>
+  <h2 class="reveal">The four models</h2>
+  <p class="lead reveal">Three supervised tree models and one unsupervised detector. Select a model for how it works, its test performance on every split and the hyperparameters selected by the search.</p>
+  <div class="reveal" style="margin-top:22px"><div class="mtabs" id="mtabs"></div><div class="mpanel" id="mpanel"></div></div>
 </div></section>
 
-<section id="results" style="background:linear-gradient(180deg,#fff0ea,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--coral)">8 · Results</span>
-  <h2 class="reveal">The leaderboard</h2>
-  <p class="lead reveal">Pick what to measure and which split to look at. All numbers are from the test portion.</p>
-  <div class="card reveal" style="margin-top:20px">
-    <div class="pills" id="metricPills"></div><div class="pills" id="splitPills" style="margin-top:10px"></div>
-    <p id="metricHelp" style="color:var(--muted);margin:14px 0 4px"></p><div id="board"></div><p id="boardNote" style="font-weight:800;margin-top:10px"></p>
+<section id="results"><div class="wrap">
+  <div class="eyebrow">Results <b>07</b></div>
+  <h2 class="reveal">Test-set performance</h2>
+  <p class="lead reveal">All values are measured on the held-out test portion at each model's default decision threshold.</p>
+  <div class="card reveal" style="margin-top:22px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><div class="seg" id="metricSeg"></div><div class="seg" id="splitSeg"></div></div>
+    <p class="note" id="metricHelp" style="margin:14px 0 2px"></p><div id="board"></div>
   </div>
-  <div class="grid g2" style="margin-top:20px;align-items:start">
-    <div class="card reveal"><h3>Does more training data help?</h3><p style="color:var(--muted)" id="lineHelp"></p><svg id="lineChart" viewBox="0 0 560 320" style="width:100%"></svg></div>
-    <div class="card reveal"><h3>All 20 runs</h3><p style="color:var(--muted)">Click a column to sort.</p><div class="scroll"><table id="allRuns"></table></div></div>
+  <div class="grid g2" style="margin-top:18px;align-items:start">
+    <div class="card reveal"><h3 id="heatTitle">Model × split</h3><p class="note">Darker is higher. Hover a cell for the exact value.</p><div class="heat" id="heat" style="margin-top:10px"></div></div>
+    <div class="card reveal"><h3>Effect of training share</h3><p class="note" id="lineHelp"></p><svg id="lineChart" viewBox="0 0 560 300" style="width:100%"></svg><div id="legend" class="note" style="display:flex;gap:14px;flex-wrap:wrap"></div></div>
   </div>
+  <div class="card reveal" style="margin-top:18px"><h3>All runs</h3><p class="note">Select a column header to sort.</p><div class="scroll" style="margin-top:8px"><table id="allRuns"></table></div></div>
 </div></section>
 
 <section id="tuning"><div class="wrap">
-  <span class="kicker" style="--c:var(--if)">9 · Tuning</span>
-  <h2 class="reveal">Did tuning help? The honest answer</h2>
-  <p class="lead reveal">Every model was first run with fixed settings, then tuned separately for each split using only its training data. Hollow dot = before, filled dot = after (average test F1 over the five splits).</p>
-  <div class="card reveal" style="margin-top:20px" id="dumbs"></div>
-  <div class="grid g2" style="margin-top:20px;align-items:start">
-    <div class="card reveal"><h3>What we learned</h3><div id="lessons"></div></div>
-    <div class="card reveal"><h3>Every setting that was tried</h3>
-      <div class="pills" id="trModel"></div><div class="pills" id="trSplit" style="margin-top:8px"></div>
-      <svg id="trialChart" viewBox="0 0 560 250" style="width:100%;margin-top:8px"></svg><p id="trialInfo" class="mono" style="min-height:3.4em;font-size:.78rem;color:#4f463e"></p></div>
+  <div class="eyebrow">Tuning <b>08</b></div>
+  <h2 class="reveal">Before and after tuning</h2>
+  <p class="lead reveal">The first run used fixed hyperparameters and the original features. The tuned run adds the six deviation features and a per-split random search on the training portion. Mean test F1 over the five splits: hollow marker before, filled marker after.</p>
+  <div class="card reveal" style="margin-top:22px" id="dumbs"></div>
+  <div class="grid g2" style="margin-top:18px;align-items:start">
+    <div class="card reveal"><h3>What the search selected</h3><div id="lessons"></div></div>
+    <div class="card reveal"><h3>Search trace</h3><p class="note">Every candidate evaluated, in order; the first is the original configuration (dashed line).</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><div class="seg" id="trModel"></div><div class="seg" id="trSplit"></div></div>
+      <svg id="trialChart" viewBox="0 0 560 240" style="width:100%;margin-top:10px"></svg><p id="trialInfo" class="mono" style="min-height:3.6em;font-size:.76rem"></p></div>
   </div>
 </div></section>
 
-<section id="figures" style="background:linear-gradient(180deg,#f3eefa,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--grape)">10 · Figures</span>
-  <h2 class="reveal">The full picture gallery</h2>
-  <p class="lead reveal">Thirteen figures generated by the pipeline. Click any one to enlarge it.</p>
+<section id="figures"><div class="wrap">
+  <div class="eyebrow">Figures <b>09</b></div>
+  <h2 class="reveal">Generated figures</h2>
+  <p class="lead reveal">Produced by the pipeline's visualisation stage. Select a figure to enlarge it.</p>
   <div class="gal" id="gallery" style="margin-top:24px"></div>
 </div></section>
 
-<section id="proof"><div class="wrap">
-  <span class="kicker" style="--c:var(--rf)">11 · Proof</span>
-  <h2 class="reveal">Don't trust us. Check.</h2>
-  <p class="lead reveal">Real logs, the exact software versions, and the commands to reproduce everything.</p>
-  <div class="card reveal" style="margin-top:20px">
-    <div class="tabs" id="proofTabs"><button class="pill on" data-t="logs">📜 Run logs</button><button class="pill" data-t="env">🧪 Environment</button><button class="pill" data-t="repro">🔁 Reproduce it</button><button class="pill" data-t="limits">⚖️ Honest limits</button></div>
-    <div id="proofBody"></div>
+<section id="repro"><div class="wrap">
+  <div class="eyebrow">Reproducibility <b>10</b></div>
+  <h2 class="reveal">Logs, environment and commands</h2>
+  <p class="lead reveal">The published logs are the actual runs behind the numbers on this page, with local paths removed.</p>
+  <div class="card reveal" style="margin-top:22px">
+    <div class="seg" id="proofTabs"><button class="on" data-t="logs">Run logs</button><button data-t="env">Environment</button><button data-t="cmd">Commands</button><button data-t="notes">Implementation notes</button></div>
+    <div id="proofBody" style="margin-top:16px"></div>
   </div>
 </div></section>
 
-<section id="quiz" class="quiz" style="background:linear-gradient(180deg,#fff3dd,#fffaf2)"><div class="wrap">
-  <span class="kicker" style="--c:var(--sun)">12 · Quick quiz</span>
-  <h2 class="reveal">Did it stick?</h2>
-  <div class="grid g3" id="quizBox" style="margin-top:22px"></div>
+<section id="refs"><div class="wrap">
+  <div class="eyebrow">References <b>11</b></div>
+  <h2 class="reveal">Dataset, algorithms and software</h2>
+  <div class="grid g2" style="margin-top:22px;align-items:start">
+    <div class="card reveal"><h3>Sources</h3><ol class="refs">
+      <li>Gulati, M. &amp; Arjunan, P. (2022). LEAD1.0: A Large-scale Annotated Dataset for Energy Anomaly Detection in Commercial Buildings. <i>ACM e-Energy '22</i>. <a href="https://www.kaggle.com/competitions/energy-anomaly-detection">Dataset</a></li>
+      <li>Breiman, L. (2001). Random Forests. <i>Machine Learning</i> 45(1), 5–32. <a href="https://doi.org/10.1023/A:1010933404324">doi</a></li>
+      <li>Liu, F. T., Ting, K. M. &amp; Zhou, Z.-H. (2008). Isolation Forest. <i>IEEE ICDM</i>, 413–422. <a href="https://doi.org/10.1109/ICDM.2008.17">doi</a></li>
+      <li>Breiman, L., Friedman, J. H., Olshen, R. A. &amp; Stone, C. J. (1984). <i>Classification and Regression Trees</i>. <a href="https://doi.org/10.1201/9781315139470">doi</a></li>
+      <li>Chen, T. &amp; Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System. <i>KDD '16</i>, 785–794. <a href="https://doi.org/10.1145/2939672.2939785">doi</a></li>
+      <li>Pedregosa, F. et al. (2011). Scikit-learn: Machine Learning in Python. <i>JMLR</i> 12, 2825–2830. <a href="https://jmlr.org/papers/v12/pedregosa11a.html">link</a></li>
+    </ol></div>
+    <div class="card reveal"><h3>Cite this repository</h3><div class="copy"><pre class="log" id="bib"></pre><button class="btn sm" id="bibCopy">Copy</button></div></div>
+  </div>
 </div></section>
 
 <footer><div class="wrap">
-  <h3 style="color:#fff">Energy Anomaly Detective</h3>
-  <p>Code, tests and the full pipeline: <a id="repoLink" href="https://github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline">github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline</a> · MIT licence</p>
+  <h3>Energy Anomaly Detection: Model × Split Comparison</h3>
+  <p>Source, tests and pipeline: <a href="https://github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline">github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline</a></p>
   <p id="pubLine"></p>
-  <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800">References</summary>
-    <ul style="font-size:.9rem;line-height:1.7">
-      <li>Gulati, M. &amp; Arjunan, P. (2022). <i>LEAD1.0: A Large-scale Annotated Dataset for Energy Anomaly Detection in Commercial Buildings.</i> ACM e-Energy '22. Data: <a href="https://www.kaggle.com/competitions/energy-anomaly-detection">Kaggle competition</a>.</li>
-      <li>Breiman, L. (2001). <i>Random Forests.</i> Machine Learning 45(1). <a href="https://doi.org/10.1023/A:1010933404324">doi</a></li>
-      <li>Liu, F. T., Ting, K. M. &amp; Zhou, Z.-H. (2008). <i>Isolation Forest.</i> IEEE ICDM. <a href="https://doi.org/10.1109/ICDM.2008.17">doi</a></li>
-      <li>Breiman, L., Friedman, J., Olshen, R. &amp; Stone, C. (1984). <i>Classification and Regression Trees.</i> <a href="https://doi.org/10.1201/9781315139470">doi</a></li>
-      <li>Chen, T. &amp; Guestrin, C. (2016). <i>XGBoost: A Scalable Tree Boosting System.</i> KDD '16. <a href="https://doi.org/10.1145/2939672.2939785">doi</a></li>
-      <li>Pedregosa, F. et al. (2011). <i>Scikit-learn: Machine Learning in Python.</i> JMLR 12. <a href="https://jmlr.org/papers/v12/pedregosa11a.html">link</a></li>
-    </ul></details>
 </div></footer>
 
-<div class="modal" id="modal"><div class="box"><button class="x" data-close>✕</button><div id="modalBody"></div></div></div>
-<div class="modal" id="light"><div class="box" style="max-width:1200px"><button class="x" data-close>✕</button><div id="lightBody"></div></div></div>
+<div class="modal" id="light"><div class="box"><button class="x" data-close aria-label="Close">✕</button><div id="lightBody"></div></div></div>
 
 <script>
-/* ============================== helpers ============================== */
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const pct = (v, d = 1) => v == null ? "–" : (100 * v).toFixed(d) + "%";
 const splitLbl = (s) => s.replace("split_", "").replace("_", "/");
 const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
 const esc = (s) => String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-const fmtSec = (s) => s == null ? "–" : s >= 3600 ? (s / 3600).toFixed(1) + " h" : s >= 60 ? Math.round(s / 60) + " min" : s.toFixed(1) + " s";
-function confetti(n = 60) { const cols = ["#f7b733", "#e4675a", "#57b894", "#6bb7e8", "#9b6fc4"];
-  for (let i = 0; i < n; i++) { const c = document.createElement("i"); c.className = "confetti"; c.style.left = Math.random() * 100 + "vw"; c.style.background = cols[i % 5];
-    c.style.animationDuration = 1.6 + Math.random() * 1.8 + "s"; c.style.transform = `rotate(${Math.random() * 360}deg)`; document.body.appendChild(c); setTimeout(() => c.remove(), 3600); } }
-const io = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .12 });
+const fmtSec = (s) => s == null ? "–" : s >= 3600 ? (s / 3600).toFixed(1) + " h" : s >= 60 ? (s / 60).toFixed(1) + " min" : s.toFixed(1) + " s";
+const seg = (el, items, cur, fn) => { el.innerHTML = items.map(([k, l]) => `<button class="${k === cur ? "on" : ""}" data-k="${k}">${l}</button>`).join("");
+  $$("button", el).forEach(b => b.onclick = () => { $$("button", el).forEach(x => x.classList.toggle("on", x === b)); fn(b.dataset.k); }); };
+const io = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
 $$(".reveal").forEach(e => io.observe(e));
 addEventListener("scroll", () => { const h = document.documentElement; $("#bar").style.width = 100 * h.scrollTop / (h.scrollHeight - h.clientHeight) + "%";
-  let cur = ""; $$("section[id]").forEach(s => { if (s.getBoundingClientRect().top < 140) cur = s.id; }); $$("#links a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + cur)); }, { passive: true });
-$$(".level button").forEach(b => b.onclick = () => { document.body.dataset.level = b.dataset.l; $$(".level button").forEach(x => x.classList.toggle("on", x === b)); });
+  let cur = ""; $$("section[id]").forEach(s => { if (s.getBoundingClientRect().top < 130) cur = s.id; }); $$("#links a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + cur)); }, { passive: true });
 $$("[data-close]").forEach(b => b.onclick = () => b.closest(".modal").classList.remove("open"));
 $$(".modal").forEach(m => m.onclick = (e) => { if (e.target === m) m.classList.remove("open"); });
-addEventListener("keydown", (e) => { if (e.key === "Escape") $$(".modal").forEach(m => m.classList.remove("open")); });
 
-/* ============================== hero animation ============================== */
-(() => { const cv = $("#heroCanvas"), ctx = cv.getContext("2d"); let W, H, t = 0; const anomalies = [];
-  const size = () => { const r = cv.getBoundingClientRect(); W = cv.width = r.width * devicePixelRatio; H = cv.height = r.height * devicePixelRatio; }; size(); addEventListener("resize", size);
-  const base = (x) => .55 - .22 * Math.sin(x * .09) - .1 * Math.sin(x * .013 + 1) + .03 * Math.sin(x * .7);
-  function frame() { t += .45; ctx.clearRect(0, 0, W, H); const step = 6 * devicePixelRatio, n = Math.ceil(W / step) + 2;
-    if (Math.random() < .012) anomalies.push({ at: t + n, kind: Math.random() < .5 ? "spike" : "zero", len: 6 + Math.random() * 8 });
-    ctx.lineWidth = 3 * devicePixelRatio; ctx.lineJoin = "round"; ctx.beginPath(); const marks = [];
-    for (let i = 0; i < n; i++) { const x = t + i; let y = base(x); const a = anomalies.find(a => x >= a.at && x < a.at + a.len);
-      if (a) { y = a.kind === "spike" ? .08 + .03 * Math.sin(x) : .93; marks.push([i * step, y * H]); }
-      i ? ctx.lineTo(i * step, y * H) : ctx.moveTo(0, y * H); }
-    const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, "#1f6f78"); g.addColorStop(1, "#4a6fa5"); ctx.strokeStyle = g; ctx.stroke();
-    ctx.fillStyle = "rgba(228,103,90,.9)"; marks.forEach(([x, y], k) => { if (k % 2 === 0) { ctx.beginPath(); ctx.arc(x, y, (5 + 2 * Math.sin(t * .3)) * devicePixelRatio, 0, 7); ctx.fill(); } });
-    while (anomalies.length && anomalies[0].at + anomalies[0].len < t) anomalies.shift(); requestAnimationFrame(frame); }
-  frame(); })();
+/* ---------- hero schematic ---------- */
+(() => { const cv = $("#heroCanvas"), ctx = cv.getContext("2d"); let W, H, t = 0; const an = [];
+  const size = () => { const r = cv.getBoundingClientRect(), d = devicePixelRatio; W = cv.width = r.width * d; H = cv.height = r.height * d; }; size(); addEventListener("resize", size);
+  const base = (x) => .56 - .2 * Math.sin(x * .085) - .08 * Math.sin(x * .012 + 1) + .025 * Math.sin(x * .9);
+  (function frame() { t += .32; const d = devicePixelRatio, step = 5 * d, n = Math.ceil(W / step) + 2; ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = "#eef0f3"; ctx.lineWidth = 1; for (let g = 1; g < 4; g++) { ctx.beginPath(); ctx.moveTo(0, g * H / 4); ctx.lineTo(W, g * H / 4); ctx.stroke(); }
+    if (Math.random() < .009) an.push({ at: t + n, kind: Math.random() < .5 ? 0 : 1, len: 7 + Math.random() * 9 });
+    const pts = []; for (let i = 0; i < n; i++) { const x = t + i, a = an.find(a => x >= a.at && x < a.at + a.len); pts.push([i * step, (a ? (a.kind ? .9 : .1 + .02 * Math.sin(x)) : base(x)) * H, !!a]); }
+    for (const a of an) { ctx.fillStyle = "rgba(196,82,74,.08)"; ctx.fillRect((a.at - t) * step, 0, a.len * step, H); }
+    ctx.lineWidth = 2 * d; ctx.lineJoin = "round";
+    for (let i = 1; i < pts.length; i++) { ctx.beginPath(); ctx.moveTo(pts[i - 1][0], pts[i - 1][1]); ctx.lineTo(pts[i][0], pts[i][1]); ctx.strokeStyle = pts[i][2] ? "#c4524a" : "#1f6f78"; ctx.stroke(); }
+    while (an.length && an[0].at + an[0].len < t) an.shift(); requestAnimationFrame(frame); })(); })();
 
-/* ============================== detective game ============================== */
-(() => { const cv = $("#gameCanvas"), ctx = cv.getContext("2d"); let W, H, series, an, round = 1, score = 0, t0 = 0, done = false, timer, hint = false, guess = null;
-  const size = () => { const r = cv.getBoundingClientRect(); W = cv.width = r.width * devicePixelRatio; H = cv.height = r.height * devicePixelRatio; draw(); }; addEventListener("resize", size);
-  function make() { const lvl = 60 + Math.random() * 200, s = []; for (let h = 0; h < 168; h++) { const hr = h % 24, day = Math.floor(h / 24), wk = day >= 5 ? .55 : 1;
-      s.push(lvl * (.45 + wk * .55 * Math.max(0, Math.sin((hr - 6) / 13 * Math.PI))) * (1 + (Math.random() - .5) * .1)); }
-    const kinds = ["spike", "zero", "drop", "flat"], kind = kinds[(round - 1 + Math.floor(Math.random() * 4)) % 4], start = 20 + Math.floor(Math.random() * 120), len = kind === "spike" ? 3 + Math.floor(Math.random() * 3) : 8 + Math.floor(Math.random() * 10);
-    const hold = s[start]; for (let h = start; h < start + len; h++) s[h] = kind === "spike" ? lvl * (2.1 + Math.random() * .4) : kind === "zero" ? 0 : kind === "drop" ? s[h] * .18 : hold;
-    series = s; an = { start, len, kind }; done = false; hint = false; guess = null; t0 = performance.now(); clearInterval(timer);
-    timer = setInterval(() => { if (!done) $("#gTime").textContent = ((performance.now() - t0) / 1000).toFixed(1); }, 100);
-    $("#gRound").textContent = round; $("#gameMsg").textContent = ""; $("#gNext").style.display = "none"; draw(); }
-  const X = (h) => 30 * devicePixelRatio + h / 167 * (W - 50 * devicePixelRatio), Y = (v, mx) => H - 26 * devicePixelRatio - v / mx * (H - 50 * devicePixelRatio);
-  function draw() { if (!series) return; ctx.clearRect(0, 0, W, H); const mx = Math.max(...series) * 1.08, d = devicePixelRatio;
-    ctx.font = `${12 * d}px Nunito`; ctx.fillStyle = "#b3a596"; ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((n, i) => { const x = X(i * 24); ctx.fillRect(x, 8 * d, 1, H - 30 * d); ctx.fillText(n, x + 5 * d, H - 8 * d); });
-    if (done || hint) { const a = hint && !done ? Math.max(0, an.start - 30) : an.start, b = hint && !done ? Math.min(167, an.start + an.len + 30) : an.start + an.len;
-      ctx.fillStyle = done ? "rgba(228,103,90,.18)" : "rgba(247,183,51,.2)"; ctx.fillRect(X(a), 8 * d, X(b) - X(a), H - 34 * d); }
-    ctx.beginPath(); series.forEach((v, h) => h ? ctx.lineTo(X(h), Y(v, mx)) : ctx.moveTo(X(h), Y(v, mx))); ctx.lineWidth = 2.6 * d; ctx.strokeStyle = "#1f6f78"; ctx.lineJoin = "round"; ctx.stroke();
-    if (guess != null) { ctx.strokeStyle = "#2a2520"; ctx.setLineDash([6 * d, 5 * d]); ctx.beginPath(); ctx.moveTo(X(guess), 8 * d); ctx.lineTo(X(guess), H - 26 * d); ctx.stroke(); ctx.setLineDash([]); } }
-  cv.addEventListener("pointerdown", (e) => { if (done) return; const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) * devicePixelRatio;
-    guess = Math.max(0, Math.min(167, Math.round((x - 30 * devicePixelRatio) / (W - 50 * devicePixelRatio) * 167))); done = true;
-    const ok = guess >= an.start - 3 && guess <= an.start + an.len + 3, secs = (performance.now() - t0) / 1000, names = { spike: "a sudden spike", zero: "the meter stuck at zero", drop: "a sudden drop", flat: "a flat line that ignores the daily rhythm" };
-    if (ok) { const pts = Math.max(20, Math.round(100 - secs * 6) - (hint ? 30 : 0)); score += pts; confetti(40); $("#gameMsg").innerHTML = `🎉 Got it: ${names[an.kind]}! +${pts}`; }
-    else $("#gameMsg").innerHTML = `🙈 Not quite. It was ${names[an.kind]} (shaded).`;
-    $("#gScore").textContent = score; $("#gScore").parentElement.classList.remove("pop"); void $("#gScore").offsetWidth; $("#gScore").parentElement.classList.add("pop");
-    $("#gNext").style.display = ""; $("#gNext").textContent = round >= 5 ? "Play again ↻" : "Next ▶"; draw(); });
-  $("#gHint").onclick = () => { hint = true; draw(); };
-  $("#gNext").onclick = () => { if (round >= 5) { round = 1; score = 0; $("#gScore").textContent = 0; } else round++; make(); };
-  size(); make(); })();
+/* ---------- anomaly type explorer ---------- */
+(() => { const cv = $("#anCanvas"), ctx = cv.getContext("2d"); let W, H, kind = "spike", prog = 1;
+  const TYPES = { spike: ["Spike", "A short burst far above the building's usual level for that hour."], drop: ["Sudden drop", "Consumption falls well below the expected daily curve for several hours."],
+    zero: ["Stuck at zero", "The meter reports zero for an extended period."], flat: ["Flatline", "The reading stays at one value and stops following the daily rhythm."] };
+  const rand = (i) => { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); };
+  const normal = Array.from({ length: 168 }, (_, h) => { const hr = h % 24, wk = Math.floor(h / 24) >= 5 ? .55 : 1; return 120 * (.42 + wk * .58 * Math.max(0, Math.sin((hr - 6) / 13 * Math.PI))) * (1 + (rand(h) - .5) * .08); });
+  const A = { spike: [58, 4], drop: [80, 9], zero: [34, 14], flat: [104, 16] };
+  const value = (h) => { const [s, l] = A[kind]; if (h < s || h >= s + l) return normal[h]; return kind === "spike" ? 285 : kind === "drop" ? normal[h] * .2 : kind === "zero" ? 0 : normal[s]; };
+  const size = () => { const r = cv.getBoundingClientRect(), d = devicePixelRatio; W = cv.width = r.width * d; H = cv.height = r.height * d; draw(); }; addEventListener("resize", size);
+  function draw() { const d = devicePixelRatio, L = 44 * d, B = 28 * d, X = (h) => L + h / 167 * (W - L - 14 * d), Y = (v) => H - B - v / 310 * (H - B - 14 * d), [s, l] = A[kind];
+    ctx.clearRect(0, 0, W, H); ctx.font = `${11 * d}px Inter`; ctx.fillStyle = "#6c7785"; ctx.strokeStyle = "#eef0f3"; ctx.lineWidth = 1;
+    [0, 100, 200, 300].forEach(v => { ctx.beginPath(); ctx.moveTo(L, Y(v)); ctx.lineTo(W - 14 * d, Y(v)); ctx.stroke(); ctx.fillText(v, 12 * d, Y(v) + 4 * d); });
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((n, i) => ctx.fillText(n, X(i * 24 + 9), H - 8 * d));
+    ctx.fillStyle = "rgba(196,82,74,.09)"; ctx.fillRect(X(s), 14 * d, X(s + l) - X(s), H - B - 14 * d);
+    ctx.setLineDash([4 * d, 4 * d]); ctx.strokeStyle = "#aab4c0"; ctx.lineWidth = 1.4 * d; ctx.beginPath(); normal.forEach((v, h) => h ? ctx.lineTo(X(h), Y(v)) : ctx.moveTo(X(h), Y(v))); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineWidth = 2.2 * d; ctx.lineJoin = "round"; for (let h = 1; h < 168; h++) { const a = h >= s && h <= s + l, v0 = normal[h - 1] + (value(h - 1) - normal[h - 1]) * prog, v1 = normal[h] + (value(h) - normal[h]) * prog;
+      ctx.beginPath(); ctx.moveTo(X(h - 1), Y(v0)); ctx.lineTo(X(h), Y(v1)); ctx.strokeStyle = a ? "#c4524a" : "#1f6f78"; ctx.stroke(); } }
+  function set(k) { kind = k; $("#anText").innerHTML = `<b style="color:var(--ink)">${TYPES[k][0]}.</b> ${TYPES[k][1]} Dashed line: the expected profile. Illustrative curve in kWh, not dataset rows.`; const t0 = performance.now();
+    (function tick(t) { prog = Math.min(1, (t - t0) / 600); prog = 1 - Math.pow(1 - prog, 3); draw(); if (prog < 1) requestAnimationFrame(tick); })(t0); }
+  seg($("#anSeg"), Object.entries(TYPES).map(([k, v]) => [k, v[0]]), kind, set); size(); set(kind); })();
 
-/* ============================== data-driven sections ============================== */
-const METRICS = { f1: ["F1 score", "Balance of precision and recall. The headline number."], precision: ["Precision", "Of the alarms it raised, how many were real anomalies."],
-  recall: ["Recall", "Of the real anomalies, how many it caught."], pr_auc: ["PR-AUC", "How well it ranks anomalies above normal readings, at every threshold."],
-  mcc: ["MCC", "A balanced score from −1 to 1 that uses all four outcomes."], accuracy: ["Accuracy", "Share of all readings labelled correctly. Misleading here: see the trap."] };
-const STAGES = [["download", "📥", "Download", "Fetch the competition files from Kaggle (skipped when they are already there)."],
-  ["preprocess", "🧹", "Preprocess", "Join the labelled readings with the building, weather and calendar features, drop columns that secretly identify the building, and engineer the deviation features."],
-  ["split", "✂️", "Split", "Draw five independent stratified train/test splits with one seed, and save the row indices so every model sees exactly the same rows."],
-  ["tune", "🎛️", "Tune", "For every split and model, search for better settings using cross-validation inside the training portion only."],
-  ["train_eval", "🏋️", "Train & test", "Fit each tuned model on its training portion, time it, and score it on the untouched test portion with 20+ metrics."],
-  ["aggregate", "🧮", "Tables", "Combine the 20 runs into comparison tables: pivots, rankings, winners, and before/after tuning."],
-  ["visualize", "🎨", "Figures", "Draw the thirteen comparison figures."], ["report", "📄", "Report", "Write a single self-contained HTML report."]];
+/* ---------- data-driven content ---------- */
+const METRICS = { f1: ["F1", "Harmonic mean of precision and recall at the default threshold."], precision: ["Precision", "Share of raised alarms that are true anomalies."],
+  recall: ["Recall", "Share of true anomalies that are detected."], pr_auc: ["PR-AUC", "Average precision: ranking quality across all thresholds."],
+  mcc: ["MCC", "Matthews correlation coefficient, from −1 to 1, using all four confusion-matrix cells."], accuracy: ["Accuracy", "Share of all readings classified correctly."] };
+const STAGES = [["download", "Download", "Fetches the competition files through the Kaggle API when they are not already present, with a manual fallback."],
+  ["preprocess", "Preprocess", "Joins the labelled readings with the feature file on building and timestamp, drops identifier-derived and constant columns, and engineers calendar and deviation features. Missing values are left for per-split imputation."],
+  ["split", "Split", "Draws five independent stratified train/test splits from the full data with one seed and stores the row indices, so every model is trained and tested on identical rows."],
+  ["tune", "Tune", "For each split and model, runs a random hyperparameter search scored on held-out data from the training portion only. The original configuration is always evaluated first."],
+  ["train_eval", "Train and evaluate", "Fits the imputer and each tuned model on the training portion, times fit and predict separately, and computes more than twenty metrics on the test portion."],
+  ["aggregate", "Aggregate", "Builds the master table, per-metric pivots, rankings, the best model per split, the training-size effect and the before/after tuning comparison."],
+  ["visualize", "Visualise", "Renders thirteen multi-panel comparison figures."], ["report", "Report", "Writes a single self-contained HTML report with embedded figures."]];
 const MODEL_INFO = {
-  random_forest: { emoji: "🌲", tag: "Supervised · many trees vote", kid: "A big team of tree-shaped detectives. Each one studies a slightly different pile of examples, then they all vote.", student: "Hundreds of decision trees, each grown on a random resample of the data and random subsets of features. The share of trees voting \"anomaly\" is the score.", expert: "Bagged CART ensemble with balanced_subsample class weights; score = mean per-tree P(anomaly); decision at 0.5." },
-  isolation_forest: { emoji: "✂️", tag: "Unsupervised · isolates the odd ones", kid: "This detective never sees the answers. It keeps cutting the pile in half at random. Odd readings end up alone very quickly!", student: "It never sees labels. It splits the data with random cuts; unusual readings are isolated in few cuts, so a short path means a high anomaly score.", expert: "Unsupervised; labels only set contamination (train anomaly rate) and score tuning candidates. Score = 2^(−E[h]/c(n)). Tuned to use only the building-deviation features." },
-  decision_tree: { emoji: "🌳", tag: "Supervised · one tree of questions", kid: "One detective with a list of yes/no questions, like \"Is this much lower than usual?\". Follow the answers to reach a decision.", student: "A single tree of yes/no questions learned from the data. A reading follows one path to a leaf, and the leaf's share of anomalies is the score.", expert: "Single CART tree. Tuned for F1 at 0.5 on the full train portion with a hold-out, because subsample-tuned depth does not transfer to the full data." },
-  xgboost: { emoji: "🚀", tag: "Supervised · trees that fix mistakes", kid: "A relay team: each new detective looks only at what the team still gets wrong and fixes a little bit of it.", student: "Builds trees one after another; each new tree corrects the errors left by the previous ones. Many small corrections add up to a strong model.", expert: "Gradient-boosted trees (hist), eval aucpr, scale_pos_weight from the train portion; tuned over depth, rounds, learning rate, sampling and weighting mode." } };
+  random_forest: ["Supervised · bagging", "An ensemble of decision trees, each grown on a bootstrap resample of the training portion with a random subset of features considered at every split. The score is the mean probability of the anomaly class across trees; class weights are balanced within each bootstrap sample."],
+  isolation_forest: ["Unsupervised · isolation", "Trees built from random feature and threshold choices on small subsamples. Points isolated in few cuts receive a high anomaly score, s = 2^(−E[h]/c(n)). Labels are never used for fitting; they set the contamination rate and score the search candidates."],
+  decision_tree: ["Supervised · single tree", "A single CART tree whose leaves store the share of anomalous training readings; that share is the score for any reading that reaches the leaf."],
+  xgboost: ["Supervised · gradient boosting", "Trees are added sequentially, each fitted to the gradient of the loss left by the previous ones, with a learning rate shrinking every step. The positive-class weight is derived from the training portion."] };
 
-fetch("data.json").then(r => r.json()).then(init).catch(() => { document.body.insertAdjacentHTML("afterbegin", '<p style="background:#fbe5e3;padding:14px;text-align:center;margin:0">Results data could not be loaded. Build the site with <code>python tools/build_site.py</code>.</p>'); });
+fetch("data.json").then(r => r.json()).then(init).catch(() => document.body.insertAdjacentHTML("afterbegin", '<p style="background:#f8e3e1;padding:12px;text-align:center;margin:0">Results data could not be loaded.</p>'));
 
 function init(D) {
   const models = Object.keys(D.base_settings), splits = Object.keys(D.split_ratios), name = (m) => D.display_names[m] || m, color = (m) => D.palette[m];
-  const R = (m, s) => D.results.find(r => r.model === m && r.split === s), B = (m, s) => D.baseline.find(r => r.model === m && r.split === s);
-  const big = splits[splits.length - 1], rate = D.dataset.anomaly_rate;
+  const R = (m, s) => D.results.find(r => r.model === m && r.split === s), big = splits[splits.length - 1], rate = D.dataset.anomaly_rate;
+  const avg = (m, k, rows = D.results) => mean(rows.filter(r => r.model === m).map(r => r[k]).filter(v => v != null));
+  const order = (k, s) => [...models].sort((a, b) => (s === "avg" ? avg(b, k) - avg(a, k) : R(b, s)[k] - R(a, s)[k]));
+  const hasBase = D.baseline.length > 0, delta = (m, k) => hasBase ? avg(m, k) - avg(m, k, D.baseline) : null, pts = (v) => (v >= 0 ? "+" : "−") + Math.abs(100 * v).toFixed(1) + " pts";
 
-  /* hero + idea */
-  $("#heroStats").innerHTML = [[D.dataset.n_rows, "meter readings", "--rf"], [200, "buildings", "--dt"], [models.length, "models", "--xgb"], [D.results.length, "experiments", "--if"]]
-    .map(([v, l, c]) => `<div class="stat" style="--c:var(${c})"><b data-count="${v}">0</b><span>${l}</span></div>`).join("");
-  $$("[data-count]").forEach(el => { const to = +el.dataset.count, t0 = performance.now(); (function up(t) { const p = Math.min(1, (t - t0) / 1600); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString(); if (p < 1) requestAnimationFrame(up); })(t0); });
-  $("#ideaRows").textContent = D.dataset.n_rows.toLocaleString();
-  const best = [...models].sort((a, b) => R(b, big).f1 - R(a, big).f1)[0], bestR = R(best, big);
-  $("#gameVs").innerHTML = `You just checked one week by eye. The best model here, <b>${name(best)}</b>, scores every one of <b>${bestR.n_test.toLocaleString()}</b> test readings in about ${fmtSec(bestR.predict_seconds)}, catches <b>${pct(bestR.recall, 0)}</b> of the real anomalies and is right in <b>${pct(bestR.precision, 0)}</b> of its alarms.`;
+  $("#heroDate").textContent = D.published.slice(0, 10);
+  $("#heroScope").textContent = `${models.length} models × ${splits.length} splits · ${D.dataset.n_rows.toLocaleString()} readings`;
+  const top = order("f1", "avg")[0];
+  $("#kpis").innerHTML = [[D.dataset.n_rows.toLocaleString(), "labelled hourly readings"], [pct(rate, 2), "anomaly rate"], [D.results.length, "model × split runs"], [pct(avg(top, "f1")), `highest mean F1 (${name(top)})`]]
+    .map(([v, l]) => `<div class="kpi"><b class="num">${v}</b><span>${l}</span></div>`).join("");
+
+  /* summary: statements computed from the tables */
+  const fast = [...models].sort((a, b) => avg(a, "fit_seconds") - avg(b, "fit_seconds"))[0], gain = (m) => R(m, big).f1 - R(m, splits[0]).f1, F = [];
+  F.push([color(top), "Ranking by mean F1", order("f1", "avg").map((m, i) => `${i + 1}. ${name(m)} ${pct(avg(m, "f1"))}`).join(" · ")]);
+  F.push([color(order("pr_auc", "avg")[0]), "Ranking by mean PR-AUC", order("pr_auc", "avg").map((m, i) => `${i + 1}. ${name(m)} ${pct(avg(m, "pr_auc"))}`).join(" · ")]);
+  F.push(["#6c7785", "Accuracy versus F1", `Accuracy spans ${pct(Math.min(...D.results.map(r => r.accuracy)))} to ${pct(Math.max(...D.results.map(r => r.accuracy)))} across all runs; F1 spans ${pct(Math.min(...D.results.map(r => r.f1)))} to ${pct(Math.max(...D.results.map(r => r.f1)))}. Predicting "normal" for every reading gives ${pct(1 - rate)} accuracy.`]);
+  F.push([color(top), `F1 change from the ${splitLbl(splits[0])} to the ${splitLbl(big)} split`, models.map(m => `${name(m)} ${pts(gain(m))}`).join(" · ")]);
+  F.push([color(fast), "Mean fit time per run", [...models].sort((a, b) => avg(a, "fit_seconds") - avg(b, "fit_seconds")).map(m => `${name(m)} ${fmtSec(avg(m, "fit_seconds"))}`).join(" · ")]);
+  if (hasBase) F.push(["#6c7785", "Mean F1 change after tuning", models.map(m => `${name(m)} ${pts(delta(m, "f1"))}`).join(" · ")]);
+  $("#findingList").innerHTML = F.map(([c, t, x]) => `<div class="finding reveal" style="--c:${c}"><b>${t}</b><span>${x}</span></div>`).join(""); $$("#findingList .reveal").forEach(e => io.observe(e));
 
   /* data */
-  const nRed = Math.round(400 * rate); $("#rateTxt").innerHTML = `about <b style="color:var(--coral)">${nRed}</b> are anomalies (${pct(rate, 2)} of all ${D.dataset.n_rows.toLocaleString()} readings: ${D.dataset.n_anomalies.toLocaleString()} in total).`;
-  const reds = new Set(); while (reds.size < nRed) reds.add(Math.floor(Math.random() * 400));
-  $("#rateDots").innerHTML = Array.from({ length: 400 }, (_, i) => `<i data-a="${reds.has(i) ? 1 : 0}"></i>`).join("");
-  new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { $$("#rateDots i[data-a='1']").forEach((d, i) => setTimeout(() => d.classList.add("a"), 150 * i)); o.disconnect(); } }).observe($("#rateDots"));
+  const nRed = Math.round(500 * rate); $("#rateTxt").innerHTML = `<b style="color:var(--ink)">${D.dataset.n_anomalies.toLocaleString()}</b> of ${D.dataset.n_rows.toLocaleString()} readings are labelled anomalous (<b style="color:var(--pos)">${pct(rate, 2)}</b>), about ${nRed} in every 500.`;
+  const reds = new Set(); let seed = 7; while (reds.size < nRed) { seed = (seed * 9301 + 49297) % 233280; reds.add(Math.floor(seed / 233280 * 500)); }
+  $("#units").innerHTML = Array.from({ length: 500 }, (_, i) => `<i data-a="${reds.has(i) ? 1 : 0}"></i>`).join("");
+  new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { $$("#units i[data-a='1']").forEach((d, i) => setTimeout(() => d.classList.add("a"), 90 * i)); o.disconnect(); } }).observe($("#units"));
   $("#nFeat").textContent = D.dataset.n_features; const feats = D.dataset.feature_columns, isNew = (f) => f.startsWith("dev_") || f === "is_zero_reading";
-  const showFeats = (all) => { const list = all ? feats : [...feats.filter(isNew), ...feats.filter(f => !isNew(f)).slice(0, 14)];
-    $("#featChips").innerHTML = list.map(f => `<span class="${isNew(f) ? "new" : ""}">${f}</span>`).join("") + (all ? "" : `<span>+ ${feats.length - list.length} more</span>`); };
+  const showFeats = (all) => { const list = all ? feats : [...feats.filter(isNew), ...feats.filter(f => !isNew(f)).slice(0, 16)];
+    $("#featChips").innerHTML = list.map(f => `<span class="${isNew(f) ? "new" : ""}">${f}</span>`).join("") + (all ? "" : `<span>+${feats.length - list.length} more</span>`); };
   showFeats(false); $("#featMore").onclick = (e) => { const all = e.target.dataset.all !== "1"; e.target.dataset.all = all ? "1" : "0"; e.target.textContent = all ? "Show fewer" : "Show all features"; showFeats(all); };
 
-  /* accuracy trap */
-  $("#lazyAcc").textContent = (100 * (1 - R(models[0], big).test_anomaly_rate)).toFixed(1);
-  const trapOpts = [["lazy", "😴 Lazy: always \"normal\""], ...models.map(m => [m, `${MODEL_INFO[m].emoji} ${name(m)}`])];
-  $("#trapPills").innerHTML = trapOpts.map(([k, l], i) => `<button class="pill ${i ? "" : "on"}" data-k="${k}">${l}</button>`).join("");
-  $("#trapDots").innerHTML = "<i></i>".repeat(100);
-  function trap(k) { const r = k === "lazy" ? { accuracy: 1 - R(models[0], big).test_anomaly_rate, precision: 0, recall: 0, f1: 0 } : R(k, big);
-    [["Acc", r.accuracy], ["Pre", r.precision], ["Rec", r.recall], ["F1", r.f1]].forEach(([id, v]) => { $("#m" + id).style.width = 100 * v + "%"; $("#t" + id).textContent = pct(v); });
-    const hit = Math.round(100 * r.recall); $$("#trapDots i").forEach((d, i) => d.className = i < hit ? "hit" : "miss");
-    $("#trapNote").innerHTML = k === "lazy" ? `Accuracy ${pct(r.accuracy)}… and it caught <span style="color:var(--bad)">0 of 100</span> anomalies. Accuracy alone would call this a great model.`
-      : `${name(k)} on the ${splitLbl(big)} split: catches <span style="color:var(--ok)">${hit} of 100</span> anomalies; ${Math.round(100 * r.precision)} of every 100 alarms are real.`; }
-  $$("#trapPills .pill").forEach(b => b.onclick = () => { $$("#trapPills .pill").forEach(x => x.classList.toggle("on", x === b)); trap(b.dataset.k); }); trap("lazy");
+  /* confusion matrix */
+  let cmM = "base", cmS = big;
+  function cm() { const ref = R(models[0], cmS), r = cmM === "base" ? { tn: ref.tn + ref.fp, fp: 0, fn: ref.fn + ref.tp, tp: 0, accuracy: (ref.tn + ref.fp) / ref.n_test, precision: 0, recall: 0, f1: 0, mcc: 0 } : R(cmM, cmS), tot = r.tn + r.fp + r.fn + r.tp;
+    [["TN", r.tn, "63,143,138"], ["FP", r.fp, "196,82,74"], ["FN", r.fn, "196,82,74"], ["TP", r.tp, "63,143,138"]].forEach(([id, v, rgb]) => { const el = $("#c" + id); el.querySelector("b").textContent = Math.round(v).toLocaleString();
+      el.style.background = `rgba(${rgb},${(.06 + .5 * Math.sqrt(v / tot)).toFixed(3)})`; });
+    $("#cmBars").innerHTML = [["accuracy", "#9aa3ad"], ["precision", "#4a6fa5"], ["recall", "#3f8f8a"], ["f1", "#c4524a"]].map(([k, c]) => `<div class="bar" style="--c:${c}"><span>${METRICS[k][0]}</span><div class="t"><i data-w="${100 * r[k]}"></i></div><span class="v num">${pct(r[k])}</span></div>`).join("") +
+      `<div class="bar" style="--c:#7d4e77"><span>MCC</span><div class="t"><i data-w="${100 * Math.max(0, r.mcc)}"></i></div><span class="v num">${r.mcc.toFixed(3)}</span></div>`;
+    requestAnimationFrame(() => $$("#cmBars i").forEach(i => i.style.width = i.dataset.w + "%"));
+    $("#cmNote").textContent = cmM === "base" ? `The baseline is correct on ${pct(r.accuracy)} of readings and detects none of the ${Math.round(r.fn).toLocaleString()} anomalies.`
+      : `${name(cmM)}, ${splitLbl(cmS)} split: ${Math.round(r.tp).toLocaleString()} anomalies detected, ${Math.round(r.fn).toLocaleString()} missed, ${Math.round(r.fp).toLocaleString()} false alarms among ${Math.round(tot).toLocaleString()} test readings.`; }
+  seg($("#cmModel"), [["base", "Majority-class baseline"], ...models.map(m => [m, name(m)])], cmM, (k) => { cmM = k; cm(); });
+  seg($("#cmSplit"), splits.map(s => [s, splitLbl(s)]), cmS, (k) => { cmS = k; cm(); }); cm();
+
+  $("#splitBars").innerHTML = splits.map(s => { const tr = Math.round(100 * D.split_ratios[s]), row = D.split_summary.find(r => r.split === s) || {};
+    return `<div class="splitrow"><span class="mono">${splitLbl(s)}</span><div class="splitbar" title="${(row.n_train || 0).toLocaleString()} train / ${(row.n_test || 0).toLocaleString()} test"><div class="tr" style="flex:${tr}">${(row.n_train || 0).toLocaleString()}</div><div class="te" style="flex:${100 - tr}">${(row.n_test || 0).toLocaleString()}</div></div></div>`; }).join("");
+  const s0 = D.split_summary[0] || {}; $("#splitNote").textContent = `Train (dark) and test (light) row counts. Each split is drawn independently from the full data with seed ${D.seed} and keeps the anomaly rate on both sides (${pct(s0.train_anomaly_rate, 2)} / ${pct(s0.test_anomaly_rate, 2)}).`;
+  $("#rules").innerHTML = [["Test data is used once.", "It is touched only to compute the final metrics."], ["Imputation is fitted per split on the training portion", "and then applied unchanged to the test portion."],
+    ["Hyperparameters are selected inside the training portion,", "on held-out data; the original configuration is always a candidate."], ["Identical rows for every model.", "Split indices are stored on disk and reused."],
+    ["Building identity is removed.", "The identifier and composite keys derived from it are dropped."], ["The unsupervised model never fits on labels.", "Labels set its contamination rate and score its candidates only."],
+    ["Class weights come from the training portion,", "including the positive-class weight used by boosting."]].map(([a, b]) => `<li><b>${a}</b> ${b}</li>`).join("");
 
   /* pipeline */
   const mainLog = [...D.logs].sort((a, b) => b.lines - a.lines)[0], lines = mainLog ? mainLog.text.split("\n") : [];
   const stageLines = (s) => { const a = lines.findIndex(l => l.includes(`Started: ${s}`)), b = lines.findIndex(l => l.includes(`Finished: ${s}`)); return a < 0 ? [] : lines.slice(a, (b < 0 ? a : b) + 1); };
-  const paint = (l) => { const m = l.match(/^(\S+ \S+) \| (\w+)\s*\| \S+ \| (.*)$/); if (!m) return esc(l); const msg = m[3].length > 260 ? m[3].slice(0, 260) + " …" : m[3];
-    return `<span class="t">${m[1].slice(11, 19)}</span> ${esc(msg).replace(/(F1=[\d.]+|PR-AUC=[\d.]+|MCC=[\d.]+|Finished: \w+ in [\w .]+|best CV [\w-]+ [\d.]+)/g, '<span class="hl">$1</span>')}`; };
-  const present = STAGES.filter(s => D.stage_timings[s[0]] != null || s[0] !== "tune" || Object.keys(D.tuning).length);
-  $("#stages").innerHTML = present.map((s, i) => `<div class="stage" data-s="${s[0]}"><span class="e">${s[1]}</span>${s[2]}<small>${D.stage_timings[s[0]] || "–"}</small></div>`).join("");
+  const paint = (l) => { const m = l.match(/^(\S+ \S+) \| (\w+)\s*\| \S+ \| (.*)$/); if (!m) return esc(l); const msg = m[3].length > 240 ? m[3].slice(0, 240) + " …" : m[3];
+    return `<span class="t">${m[1].slice(11, 19)}</span>  ${esc(msg).replace(/(F1=[\d.]+|PR-AUC=[\d.]+|MCC=[\d.]+|Finished: \w+ in [\w .]+|best CV [\w-]+ [\d.]+)/g, '<span class="hl">$1</span>')}`; };
+  $("#stages").innerHTML = STAGES.map((s, i) => `<div class="stage" data-s="${s[0]}"><span class="n">${String(i + 1).padStart(2, "0")}</span><span class="l">${s[1]}</span><span class="d">${D.stage_timings[s[0]] || "–"}</span></div>`).join("");
   function stage(k) { const s = STAGES.find(x => x[0] === k), ls = stageLines(k); $$(".stage").forEach(e => e.classList.toggle("on", e.dataset.s === k));
-    $("#stTitle").textContent = `${s[1]} ${s[2]}`; $("#stText").textContent = s[3]; $("#stTime").textContent = D.stage_timings[k] ? `Real duration: ${D.stage_timings[k]} (from ${mainLog.file})` : "";
-    const shown = ls.length > 26 ? [...ls.slice(0, 14), `… ${ls.length - 24} more lines …`, ...ls.slice(-10)] : ls; $("#stLog").innerHTML = shown.length ? shown.map(paint).join("\n") : "No log lines for this step in the published run."; }
+    $("#stTitle").textContent = s[1]; $("#stText").textContent = s[2]; $("#stTime").textContent = D.stage_timings[k] ? `Measured duration ${D.stage_timings[k]} · log ${mainLog ? mainLog.file : ""}` : "";
+    const shown = ls.length > 24 ? [...ls.slice(0, 13), `… ${ls.length - 22} lines omitted …`, ...ls.slice(-9)] : ls; $("#stLog").innerHTML = shown.length ? shown.map(paint).join("\n") : "No log lines for this stage in the published run."; }
   $$(".stage").forEach(e => e.onclick = () => stage(e.dataset.s)); stage("train_eval");
 
-  /* fair contest */
-  $("#splitBars").innerHTML = splits.map(s => { const tr = Math.round(100 * D.split_ratios[s]), row = D.split_summary.find(r => r.split === s) || {};
-    return `<div title="${(row.n_train || 0).toLocaleString()} train / ${(row.n_test || 0).toLocaleString()} test readings"><div class="splitbar"><div class="tr" style="flex:${tr}">train ${tr}%</div><div class="te" style="flex:${100 - tr}">test ${100 - tr}%</div></div></div>`; }).join("");
-  const s0 = D.split_summary[0] || {}; $("#splitNote").textContent = `Every split keeps the same anomaly rate on both sides (${pct(s0.train_anomaly_rate, 2)} train, ${pct(s0.test_anomaly_rate, 2)} test), and each is drawn independently from the full data with seed ${D.seed}. Hover a bar for the row counts.`;
-  $("#rules").innerHTML = ["🔒 <b>The test part stays locked.</b> It is used once, for the final score.", "🧮 <b>Missing values are filled using the training part only</b> (per split), then the same fill is applied to the test part.",
-    "🎛️ <b>Tuning happens inside the training part</b> with cross-validation; the original settings are always one of the candidates.", "👯 <b>All four models get exactly the same rows</b> in every split: the indices are saved to disk.",
-    "🏷️ <b>The building's identity is hidden</b>: the ID and columns built from it are removed.", "🙈 <b>Isolation Forest never sees labels when learning</b>; they only set its alarm rate and score its candidates.",
-    `🎲 <b>One seed (${D.seed}) everywhere</b>, so a rerun gives the same numbers.`].map(r => `<li>${r}</li>`).join("");
-
   /* models */
-  const avg = (m, k, rows = D.results) => mean(rows.filter(r => r.model === m).map(r => r[k]).filter(v => v != null));
-  $("#modelCards").innerHTML = models.map(m => `<div class="card model reveal" data-m="${m}" style="--c:${color(m)}"><span class="emoji">${MODEL_INFO[m].emoji}</span><div class="tag">${MODEL_INFO[m].tag}</div><h3>${name(m)}</h3>
-    <div class="score">${pct(avg(m, "f1"))}</div><div style="color:var(--muted);font-weight:700;font-size:.86rem">average F1 over 5 splits</div></div>`).join("");
-  $$("#modelCards .reveal").forEach(e => io.observe(e));
-  $$(".model").forEach(c => c.onclick = () => { const m = c.dataset.m, i = MODEL_INFO[m], r = R(m, big), t = (D.tuning[m] || {})[big], set = { ...D.base_settings[m], ...(t ? t.params : {}) };
-    $("#modalBody").innerHTML = `<span class="emoji">${i.emoji}</span><div class="tag" style="color:${color(m)};font-weight:800;text-transform:uppercase;font-size:.78rem;letter-spacing:.08em">${i.tag}</div><h2 style="color:${color(m)}">${name(m)}</h2>
-      <p class="lead">${i[document.body.dataset.level]}</p>
-      <h3 style="margin-top:18px">On the ${splitLbl(big)} split (test data)</h3><div class="kv" style="margin-top:8px">${["f1", "precision", "recall", "pr_auc", "mcc", "accuracy"].map(k => `<b>${METRICS[k][0]}</b><span>${k === "mcc" ? r[k].toFixed(3) : pct(r[k], 2)}</span>`).join("")}
-        <b>Training time</b><span>${fmtSec(r.fit_seconds)} on ${r.n_train.toLocaleString()} readings</span><b>Confusion</b><span>${r.tp.toLocaleString()} caught · ${r.fn.toLocaleString()} missed · ${r.fp.toLocaleString()} false alarms · ${r.tn.toLocaleString()} correct "normal"</span></div>
-      <h3 style="margin-top:18px">Final settings ${t ? `(tuned for ${t.objective})` : ""}</h3><div class="kv mono" style="margin-top:8px">${Object.entries(set).map(([k, v]) => `<b>${k}</b><span>${v === null ? "None" : v}</span>`).join("")}</div>`;
-    $("#modal").classList.add("open"); });
+  $("#mtabs").innerHTML = models.map(m => `<div class="mtab" data-m="${m}" style="--c:${color(m)}"><span class="s num">${pct(avg(m, "f1"))}</span><b>${name(m)}</b><small>${MODEL_INFO[m][0]} · mean F1</small></div>`).join("");
+  function model(m) { $$(".mtab").forEach(t => t.classList.toggle("on", t.dataset.m === m)); const r = R(m, big), t = (D.tuning[m] || {})[big], set = { ...D.base_settings[m], ...(t ? t.params : {}) };
+    $("#mpanel").innerHTML = `<div class="grid g2" style="align-items:start"><div><h3 style="color:${color(m)}">${name(m)}</h3><p>${MODEL_INFO[m][1]}</p>
+      <h3 style="margin-top:18px;font-size:1rem">Selected hyperparameters <span class="note" style="font-family:Inter;font-weight:400">${splitLbl(big)} split${t ? ` · objective ${t.objective}` : ""}</span></h3>
+      <div class="kv mono" style="margin-top:8px">${Object.entries(set).map(([k, v]) => `<b>${k}</b><span>${v === null ? "None" : v}</span>`).join("")}</div></div>
+      <div><h3 style="font-size:1rem">Test performance by split</h3><div style="overflow:auto"><table style="margin-top:8px"><tr><th>Split</th><th>F1</th><th>Precision</th><th>Recall</th><th>PR-AUC</th><th>Fit</th></tr>
+      ${splits.map(s => { const x = R(m, s); return `<tr><td class="mono">${splitLbl(s)}</td><td class="num">${pct(x.f1)}</td><td class="num">${pct(x.precision)}</td><td class="num">${pct(x.recall)}</td><td class="num">${pct(x.pr_auc)}</td><td class="num">${fmtSec(x.fit_seconds)}</td></tr>`; }).join("")}</table></div>
+      <p class="note" style="margin-top:10px">${splitLbl(big)} split: ${Math.round(r.tp).toLocaleString()} detected, ${Math.round(r.fn).toLocaleString()} missed, ${Math.round(r.fp).toLocaleString()} false alarms; trained on ${Math.round(r.n_train).toLocaleString()} readings.</p></div></div>`; }
+  $$(".mtab").forEach(t => t.onclick = () => model(t.dataset.m)); model(top);
 
-  /* leaderboard */
-  let metric = "f1", split = big;
-  $("#metricPills").innerHTML = Object.entries(METRICS).map(([k, v]) => `<button class="pill ${k === metric ? "on" : ""}" data-k="${k}">${v[0]}</button>`).join("");
-  $("#splitPills").innerHTML = [...splits.map(s => [s, `${splitLbl(s)} split`]), ["avg", "Average of all 5"]].map(([k, l]) => `<button class="pill ${k === split ? "on" : ""}" data-k="${k}">${l}</button>`).join("");
-  $("#board").innerHTML = models.map(m => `<div class="row" data-m="${m}" style="--c:${color(m)}"><div><span class="medal"></span>${name(m)}</div><div class="track"><i></i></div><div class="v"></div></div>`).join("");
-  function board() { const val = (m) => split === "avg" ? avg(m, metric) : R(m, split)[metric], order = [...models].sort((a, b) => val(b) - val(a)), medals = ["🥇", "🥈", "🥉", ""];
-    order.forEach((m, i) => { const row = $(`#board .row[data-m="${m}"]`); row.style.order = i; row.querySelector("i").style.width = Math.max(1.5, 100 * Math.max(0, val(m))) + "%";
-      row.querySelector(".v").textContent = metric === "mcc" ? val(m).toFixed(3) : pct(val(m)); row.querySelector(".medal").textContent = medals[i]; });
-    $("#board").style.display = "flex"; $("#board").style.flexDirection = "column"; $("#metricHelp").textContent = METRICS[metric][1];
-    $("#boardNote").textContent = `${name(order[0])} leads on ${METRICS[metric][0]} for ${split === "avg" ? "the average of all splits" : "the " + splitLbl(split) + " split"}.`; line(); }
-  $$("#metricPills .pill").forEach(b => b.onclick = () => { metric = b.dataset.k; $$("#metricPills .pill").forEach(x => x.classList.toggle("on", x === b)); board(); });
-  $$("#splitPills .pill").forEach(b => b.onclick = () => { split = b.dataset.k; $$("#splitPills .pill").forEach(x => x.classList.toggle("on", x === b)); board(); });
-  function line() { const sv = $("#lineChart"), xs = splits.map(s => 100 * D.split_ratios[s]), X = (v) => 50 + (v - 25) / 60 * 480, all = D.results.map(r => r[metric]), lo = Math.min(0, ...all), Y = (v) => 280 - (v - lo) / (1 - lo) * 250;
-    let h = ""; [0, .25, .5, .75, 1].forEach(g => { const v = lo + g * (1 - lo); h += `<line x1="50" x2="540" y1="${Y(v)}" y2="${Y(v)}" stroke="#efe4d6"/><text x="44" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="#7a6f65">${metric === "mcc" ? v.toFixed(2) : Math.round(100 * v)}</text>`; });
-    xs.forEach(x => h += `<text x="${X(x)}" y="304" text-anchor="middle" font-size="12" font-weight="700" fill="#7a6f65">${x}%</text>`);
-    models.forEach(m => { const pts = splits.map((s, i) => [X(xs[i]), Y(R(m, s)[metric]), R(m, s)[metric]]);
-      h += `<polyline points="${pts.map(p => p[0] + "," + p[1]).join(" ")}" fill="none" stroke="${color(m)}" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-        pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="6" fill="#fff" stroke="${color(m)}" stroke-width="3"><title>${name(m)}: ${metric === "mcc" ? p[2].toFixed(3) : pct(p[2], 2)}</title></circle>`).join(""); });
-    sv.innerHTML = h; $("#lineHelp").textContent = `${METRICS[metric][0]} on the test portion as the training share grows from 30% to 80%. Hover a point.`; }
-  board();
-  const cols = [["split", "Split"], ["model", "Model"], ["f1", "F1"], ["precision", "Precision"], ["recall", "Recall"], ["pr_auc", "PR-AUC"], ["mcc", "MCC"], ["accuracy", "Accuracy"], ["fit_seconds", "Train time"]]; let sortK = "f1", dir = -1;
-  function table() { const rows = [...D.results].sort((a, b) => (a[sortK] > b[sortK] ? 1 : -1) * dir);
-    $("#allRuns").innerHTML = `<tr>${cols.map(c => `<th data-k="${c[0]}">${c[1]}${c[0] === sortK ? (dir < 0 ? " ▼" : " ▲") : ""}</th>`).join("")}</tr>` + rows.map(r => `<tr><td>${splitLbl(r.split)}</td><td><span class="sw" style="background:${color(r.model)}"></span>${name(r.model)}</td>${cols.slice(2).map(c => `<td>${c[0] === "fit_seconds" ? fmtSec(r[c[0]]) : c[0] === "mcc" ? r.mcc.toFixed(3) : pct(r[c[0]])}</td>`).join("")}</tr>`).join("");
-    $$("#allRuns th").forEach(th => th.onclick = () => { dir = sortK === th.dataset.k ? -dir : -1; sortK = th.dataset.k; table(); }); } table();
+  /* results */
+  let metric = "f1", split = big; const val = (m, s = split, k = metric) => s === "avg" ? avg(m, k) : R(m, s)[k], show = (v, k = metric) => k === "mcc" ? v.toFixed(3) : pct(v);
+  $("#board").innerHTML = models.map(m => `<div class="rank" data-m="${m}" style="--c:${color(m)}"><span class="p"></span><span class="nm">${name(m)}</span><div class="t"><i></i></div><span class="v num"></span></div>`).join("");
+  $("#board").style.cssText = "display:flex;flex-direction:column";
+  function results() { order(metric, split).forEach((m, i) => { const row = $(`.rank[data-m="${m}"]`); row.style.order = i; row.querySelector(".p").textContent = "#" + (i + 1); row.querySelector("i").style.width = Math.max(1, 100 * Math.max(0, val(m))) + "%"; row.querySelector(".v").textContent = show(val(m)); });
+    $("#metricHelp").textContent = `${METRICS[metric][0]}: ${METRICS[metric][1]}`; heat(); line(); }
+  function heat() { const all = D.results.map(r => r[metric]), lo = Math.min(...all), hi = Math.max(...all), el = $("#heat"); el.style.gridTemplateColumns = `130px repeat(${splits.length}, 1fr)`;
+    $("#heatTitle").textContent = `${METRICS[metric][0]} by model and split`;
+    el.innerHTML = `<div></div>${splits.map(s => `<div class="hh">${splitLbl(s)}</div>`).join("")}` + models.map(m => `<div class="hh" style="justify-content:start;color:var(--ink);font-size:.84rem">${name(m)}</div>` + splits.map(s => { const v = R(m, s)[metric], t = (v - lo) / ((hi - lo) || 1);
+      return `<div class="hc num" title="${name(m)} · ${splitLbl(s)} · ${METRICS[metric][0]} ${show(v)}" style="background:rgba(31,111,120,${(.08 + .82 * t).toFixed(3)});color:${t > .55 ? "#fff" : "#1b2330"}">${metric === "mcc" ? v.toFixed(2) : (100 * v).toFixed(1)}</div>`; }).join("")).join(""); }
+  function line() { const sv = $("#lineChart"), xs = splits.map(s => 100 * D.split_ratios[s]), X = (v) => 48 + (v - 25) / 60 * 490, all = D.results.map(r => r[metric]), lo = Math.min(0, ...all), Y = (v) => 262 - (v - lo) / (1 - lo) * 240; let h = "";
+    [0, .25, .5, .75, 1].forEach(g => { const v = lo + g * (1 - lo); h += `<line x1="48" x2="545" y1="${Y(v)}" y2="${Y(v)}" stroke="#eceae4"/><text x="42" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="#6c7785">${metric === "mcc" ? v.toFixed(2) : Math.round(100 * v)}</text>`; });
+    xs.forEach(x => h += `<text x="${X(x)}" y="284" text-anchor="middle" font-size="11" fill="#6c7785">${x}%</text>`); h += `<text x="296" y="299" text-anchor="middle" font-size="11" fill="#6c7785">training share</text>`;
+    models.forEach(m => { const p = splits.map((s, i) => [X(xs[i]), Y(R(m, s)[metric]), R(m, s)[metric]]); h += `<polyline points="${p.map(q => q[0] + "," + q[1]).join(" ")}" fill="none" stroke="${color(m)}" stroke-width="2.4" stroke-linejoin="round"/>` +
+      p.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="4.5" fill="#fff" stroke="${color(m)}" stroke-width="2.2"><title>${name(m)}: ${show(q[2])}</title></circle>`).join(""); });
+    sv.innerHTML = h; $("#lineHelp").textContent = `Test ${METRICS[metric][0]} as the training share grows from ${xs[0]}% to ${xs[xs.length - 1]}%.`;
+    $("#legend").innerHTML = models.map(m => `<span><span class="dot" style="background:${color(m)}"></span>${name(m)}</span>`).join(""); }
+  seg($("#metricSeg"), Object.entries(METRICS).map(([k, v]) => [k, v[0]]), metric, (k) => { metric = k; results(); });
+  seg($("#splitSeg"), [...splits.map(s => [s, splitLbl(s)]), ["avg", "Mean"]], split, (k) => { split = k; results(); }); results();
+  const cols = [["split", "Split"], ["model", "Model"], ["f1", "F1"], ["precision", "Precision"], ["recall", "Recall"], ["pr_auc", "PR-AUC"], ["roc_auc", "ROC-AUC"], ["mcc", "MCC"], ["accuracy", "Accuracy"], ["fit_seconds", "Fit"], ["predict_seconds", "Predict"]]; let sortK = "f1", dir = -1;
+  (function table() { const rows = [...D.results].sort((a, b) => (a[sortK] > b[sortK] ? 1 : -1) * dir);
+    $("#allRuns").innerHTML = `<tr>${cols.map(c => `<th data-k="${c[0]}">${c[1]}${c[0] === sortK ? (dir < 0 ? " ↓" : " ↑") : ""}</th>`).join("")}</tr>` + rows.map(r => `<tr><td class="mono">${splitLbl(r.split)}</td><td><span class="dot" style="background:${color(r.model)}"></span>${name(r.model)}</td>${cols.slice(2).map(c => `<td class="num">${c[0].endsWith("seconds") ? fmtSec(r[c[0]]) : c[0] === "mcc" ? r.mcc.toFixed(3) : pct(r[c[0]])}</td>`).join("")}</tr>`).join("");
+    $$("#allRuns th").forEach(th => th.onclick = () => { dir = sortK === th.dataset.k ? -dir : -1; sortK = th.dataset.k; table(); }); })();
 
   /* tuning */
-  const hasBase = D.baseline.length > 0;
-  $("#dumbs").innerHTML = hasBase ? models.map(m => { const a = avg(m, "f1", D.baseline), b = avg(m, "f1"), l = Math.min(a, b), w = Math.abs(b - a), d = b - a;
-    return `<div class="dumb" style="--c:${color(m)}"><div>${MODEL_INFO[m].emoji} ${name(m)}</div><div class="ln"><div class="seg" style="left:${100 * l}%;width:${100 * w}%"></div>
-      <div class="pt" style="left:${100 * a}%"></div><div class="pt after" style="left:${100 * b}%"></div><div class="lab" style="left:${100 * b}%;color:${color(m)}">${pct(a)} → ${pct(b)} (${d >= 0 ? "+" : ""}${(100 * d).toFixed(1)} pts)</div></div></div>`; }).join("")
-    + `<p style="color:var(--muted);font-size:.9rem;margin-top:14px">Scale: 0% (left) to 100% (right). "Before" used fixed settings and the original features; "after" adds the building-deviation features and per-split tuning.</p>` : "<p>No untuned baseline was published.</p>";
-  const d = (m, k) => hasBase ? avg(m, k) - avg(m, k, D.baseline) : 0, sign = (v) => (v >= 0 ? "+" : "") + (100 * v).toFixed(1) + " pts";
-  const ifSet = Object.values(D.tuning.isolation_forest || {})[0];
-  $("#lessons").innerHTML = [["✂️", "Isolation Forest", `F1 ${sign(d("isolation_forest", "f1"))}. With all features it looked for globally rare readings (huge buildings, extreme weather), which are not LEAD anomalies. Restricted to the "how unusual for this building" features${ifSet ? ` (feature_set = ${ifSet.params.feature_set})` : ""}, it finally isolates the right ones.`],
-    ["🚀", "XGBoost", `F1 ${sign(d("xgboost", "f1"))}. More rounds with a smaller learning rate and a gentler anomaly weight made it the overall winner.`],
-    ["🌲", "Random Forest", `F1 ${sign(d("random_forest", "f1"))}. Its original settings were already close to the best the search could find.`],
-    ["🌳", "Decision Tree", `F1 ${sign(d("decision_tree", "f1"))}. The instructive case: tuning for ranking (PR-AUC) on a small sample picked settings that predicted worse at the 0.5 threshold on the full data, so it is tuned for F1 on its full training portion instead.`]]
-    .map(([e, t, x]) => `<p><b>${e} ${t}.</b> ${x}</p>`).join("");
+  $("#dumbs").innerHTML = hasBase ? models.map(m => { const a = avg(m, "f1", D.baseline), b = avg(m, "f1"), d = b - a;
+    return `<div class="dumb" style="--c:${color(m)}"><div><span class="dot" style="background:${color(m)}"></span><b style="color:var(--ink)">${name(m)}</b></div><div class="ln"><div class="sg" style="left:${100 * Math.min(a, b)}%;width:${100 * Math.abs(d)}%"></div><div class="pt" style="left:${100 * a}%" title="before ${pct(a)}"></div><div class="pt after" style="left:${100 * b}%" title="after ${pct(b)}"></div></div>
+      <div class="r num">${pct(a)} → <b style="color:var(--ink)">${pct(b)}</b> <span class="delta ${d >= 0 ? "up" : "down"}">${pts(d)}</span></div></div>`; }).join("") + `<p class="note" style="margin-top:6px">Axis: mean test F1 from 0% (left) to 100% (right).</p>` : "<p>No untuned run was published with these results.</p>";
+  const tp = (m) => Object.values(D.tuning[m] || {}), same = (m, k) => { const v = [...new Set(tp(m).map(t => JSON.stringify(t.params[k])))]; return v.length === 1 && v[0] !== undefined ? JSON.parse(v[0]) : null; };
+  const describe = (m) => { const keys = [...new Set(tp(m).flatMap(t => Object.keys(t.params)))]; if (!keys.length) return "the original configuration on every split";
+    const fixed = keys.filter(k => same(m, k) !== null).map(k => `<code>${k}=${same(m, k)}</code>`), varied = keys.filter(k => same(m, k) === null);
+    return (fixed.length ? `${fixed.join(", ")} on every split` : "") + (varied.length ? `${fixed.length ? "; " : ""}${varied.map(k => `<code>${k}</code>`).join(", ")} varied by split` : ""); };
+  $("#lessons").innerHTML = models.filter(m => D.tuning[m]).map(m => { const t = tp(m), o = [...new Set(t.map(x => x.objective))].join(" / "), rows = [...new Set(t.map(x => x.rows).filter(Boolean))];
+    return `<p><b style="color:var(--ink)"><span class="dot" style="background:${color(m)}"></span>${name(m)}.</b> Selected ${describe(m)}. Objective ${o}; ${t[0].trials.length} candidates per split; tuned on ${rows.length === 1 ? rows[0].toLocaleString() + " rows" : `${Math.min(...rows).toLocaleString()}–${Math.max(...rows).toLocaleString()} rows`} of the training portion.${hasBase ? ` Mean test F1 ${pts(delta(m, "f1"))}, PR-AUC ${pts(delta(m, "pr_auc"))}.` : ""}</p>`; }).join("") || "<p>No tuning results were published.</p>";
   let tm = models.find(m => D.tuning[m]) || models[0], ts = big;
-  $("#trModel").innerHTML = models.map(m => `<button class="pill ${m === tm ? "on" : ""}" data-k="${m}">${name(m)}</button>`).join(""); $("#trSplit").innerHTML = splits.map(s => `<button class="pill ${s === ts ? "on" : ""}" data-k="${s}">${splitLbl(s)}</button>`).join("");
-  function trials() { const t = (D.tuning[tm] || {})[ts], sv = $("#trialChart"); if (!t) { sv.innerHTML = ""; $("#trialInfo").textContent = "No tuning result for this combination."; return; }
-    const sc = t.trials.map(x => x.score), lo = Math.max(0, Math.min(...sc) - .05), hi = Math.min(1, Math.max(...sc) + .05), X = (i) => 50 + i * (480 / Math.max(t.trials.length - 1, 1)), Y = (v) => 215 - (v - lo) / (hi - lo) * 185, bi = sc.indexOf(Math.max(...sc));
-    let h = `<text x="50" y="244" font-size="11" fill="#7a6f65">candidate 1 (original settings) → candidate ${t.trials.length}</text>`;
-    [lo, (lo + hi) / 2, hi].forEach(v => h += `<line x1="50" x2="540" y1="${Y(v)}" y2="${Y(v)}" stroke="#efe4d6"/><text x="44" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="#7a6f65">${v.toFixed(2)}</text>`);
-    t.trials.forEach((x, i) => h += `<line x1="${X(i)}" x2="${X(i)}" y1="${Y(lo)}" y2="${Y(x.score)}" stroke="${i === bi ? "#f7b733" : color(tm)}" stroke-width="3" opacity=".35"/><circle class="trial" data-i="${i}" cx="${X(i)}" cy="${Y(x.score)}" r="${i === bi ? 10 : 7}" fill="${i === bi ? "#f7b733" : i === 0 ? "#b9ada0" : color(tm)}" stroke="#fff" stroke-width="2"/>`);
-    sv.innerHTML = h; const show = (i) => { const x = t.trials[i]; $("#trialInfo").innerHTML = `<b>${t.objective} ${x.score.toFixed(4)}</b>${i === bi ? " ⭐ chosen" : ""}${i === 0 ? " (original settings)" : ""} · ${fmtSec(x.seconds)}<br>${esc(JSON.stringify(x.params)) === "{}" ? "original settings" : esc(JSON.stringify(x.params))}`; };
-    $$(".trial", sv).forEach(c => { c.onmouseenter = c.onclick = () => show(+c.dataset.i); }); show(bi); }
-  $$("#trModel .pill").forEach(b => b.onclick = () => { tm = b.dataset.k; $$("#trModel .pill").forEach(x => x.classList.toggle("on", x === b)); trials(); });
-  $$("#trSplit .pill").forEach(b => b.onclick = () => { ts = b.dataset.k; $$("#trSplit .pill").forEach(x => x.classList.toggle("on", x === b)); trials(); }); trials();
+  function trials() { const t = (D.tuning[tm] || {})[ts], sv = $("#trialChart"); if (!t) { sv.innerHTML = ""; $("#trialInfo").textContent = "No search result for this combination."; return; }
+    const sc = t.trials.map(x => x.score), lo = Math.max(0, Math.min(...sc) - .04), hi = Math.min(1, Math.max(...sc) + .04), X = (i) => 52 + i * (480 / Math.max(t.trials.length - 1, 1)), Y = (v) => 200 - (v - lo) / (hi - lo) * 175, bi = sc.indexOf(Math.max(...sc));
+    let h = `<text x="52" y="230" font-size="11" fill="#6c7785">candidate index (1 = original configuration) · validation ${t.objective}</text>`;
+    [lo, (lo + hi) / 2, hi].forEach(v => h += `<line x1="52" x2="540" y1="${Y(v)}" y2="${Y(v)}" stroke="#eceae4"/><text x="46" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="#6c7785">${v.toFixed(2)}</text>`);
+    h += `<line x1="52" x2="540" y1="${Y(sc[0])}" y2="${Y(sc[0])}" stroke="#9aa3ad" stroke-dasharray="4 4"/>`;
+    t.trials.forEach((x, i) => h += `<circle class="trial" data-i="${i}" cx="${X(i)}" cy="${Y(x.score)}" r="${i === bi ? 8 : 5.5}" fill="${i === bi ? color(tm) : "#fff"}" stroke="${i === 0 ? "#6c7785" : color(tm)}" stroke-width="2.2"/>`);
+    sv.innerHTML = h; const info = (i) => { const x = t.trials[i]; $("#trialInfo").innerHTML = `candidate ${i + 1}${i === bi ? " · selected" : ""}${i === 0 ? " · original configuration" : ""} · ${t.objective} ${x.score.toFixed(4)} · ${fmtSec(x.seconds)}<br>${Object.keys(x.params).length ? esc(JSON.stringify(x.params)) : "{}"}`; };
+    $$(".trial", sv).forEach(c => { c.onmouseenter = c.onclick = () => info(+c.dataset.i); }); info(bi); }
+  seg($("#trModel"), models.filter(m => D.tuning[m]).map(m => [m, name(m)]), tm, (k) => { tm = k; trials(); }); seg($("#trSplit"), splits.map(s => [s, splitLbl(s)]), ts, (k) => { ts = k; trials(); }); trials();
 
   /* gallery */
-  $("#gallery").innerHTML = D.figures.map((f, i) => `<figure data-i="${i}"><img src="${f.file}" alt="${esc(f.title)}" loading="lazy"><figcaption>${f.title}</figcaption></figure>`).join("");
+  $("#gallery").innerHTML = D.figures.map((f, i) => `<figure data-i="${i}"><img src="${f.file}" alt="${esc(f.title)}" loading="lazy"><figcaption><b>Figure ${i + 1}. ${f.title}</b><span>${f.caption}</span></figcaption></figure>`).join("");
   let fi = 0; const light = (i) => { fi = (i + D.figures.length) % D.figures.length; const f = D.figures[fi];
-    $("#lightBody").innerHTML = `<h3>${f.title}</h3><p style="color:var(--muted)">${f.caption}</p><img src="${f.file}" alt="${esc(f.title)}"><p style="display:flex;gap:10px;justify-content:center;margin-top:14px"><button class="btn sm alt" id="lp">◀ Previous</button><button class="btn sm alt" id="ln">Next ▶</button></p>`;
+    $("#lightBody").innerHTML = `<h3>Figure ${fi + 1}. ${f.title}</h3><p class="note">${f.caption}</p><img src="${f.file}" alt="${esc(f.title)}"><p style="display:flex;gap:8px;justify-content:center;margin-top:14px"><button class="btn sm ghost" id="lp">Previous</button><button class="btn sm ghost" id="ln">Next</button></p>`;
     $("#lp").onclick = () => light(fi - 1); $("#ln").onclick = () => light(fi + 1); $("#light").classList.add("open"); };
   $$("#gallery figure").forEach(f => f.onclick = () => light(+f.dataset.i));
-  addEventListener("keydown", (e) => { if (!$("#light").classList.contains("open")) return; if (e.key === "ArrowRight") light(fi + 1); if (e.key === "ArrowLeft") light(fi - 1); });
+  addEventListener("keydown", (e) => { if (e.key === "Escape") $("#light").classList.remove("open"); if (!$("#light").classList.contains("open")) return; if (e.key === "ArrowRight") light(fi + 1); if (e.key === "ArrowLeft") light(fi - 1); });
 
-  /* proof */
-  const cmd = (c) => `<div class="copy"><pre class="log" style="margin-top:8px">${esc(c)}</pre><button class="btn sm" data-copy="${esc(c)}">Copy</button></div>`;
-  const tabs = {
-    logs: () => `<div class="pills" id="logPick">${D.logs.map((l, i) => `<button class="pill ${i === D.logs.length - 1 ? "on" : ""}" data-i="${i}">${l.start.slice(0, 16)} · ${l.lines} lines</button>`).join("")}</div>
-      <p style="margin:12px 0 6px"><input id="logQ" placeholder="Filter lines, e.g. xgboost or F1=" style="width:100%;padding:11px 14px;border-radius:12px;border:2px solid var(--line);font:600 .95rem Nunito"></p><p id="logMeta" style="color:var(--muted);font-size:.9rem"></p><pre class="log" id="logView"></pre>`,
-    env: () => `<div class="kv"><b>Python</b><span>${D.python || "–"}</span><b>Platform</b><span>${D.platform || "–"}</span>${Object.entries(D.libraries).map(([k, v]) => `<b>${k}</b><span>${v}</span>`).join("")}
-      <b>Random seed</b><span>${D.seed}</span><b>Split mode</b><span>${D.split_mode}</span><b>Readings used</b><span>${D.dataset.n_rows.toLocaleString()}${D.dataset.sample_fraction ? ` (a ${pct(D.dataset.sample_fraction, 0)} sample)` : " (all labelled rows)"}</span><b>Results published</b><span>${D.published}</span></div>`,
-    repro: () => `<p>Clone the repository, add a Kaggle token, then:</p>${cmd(".\\run.bat")}<p style="margin-top:14px">Or step by step on any system:</p>${cmd("python -m venv .venv\n.venv/bin/pip install -r requirements.txt\n.venv/bin/python -m src.main --stage all")}<p style="margin-top:14px">Quick trial on 5% of the data, and the tests:</p>${cmd("python -m src.main --stage all --sample 0.05\npython -m pytest")}`,
-    limits: () => `<ul class="rules"><li><b>One dataset, one year.</b> Results may differ on other buildings or meters.</li><li><b>Random stratified splits.</b> Readings from the same building appear on both sides; a by-building split (available in the config) is the stricter test.</li>
-      <li><b>Bounded tuning.</b> A random search with a fixed budget, not an exhaustive one, so "tuned" means better, not provably best.</li><li><b>The typical-level features come with the dataset</b> and were computed over the whole year, so the deviation features use information from the full series (never labels).</li>
-      <li><b>Isolation Forest's labels.</b> It never trains on labels, but they set its alarm rate and chose its settings.</li><li><b>No raw data on this page.</b> The dataset is subject to the competition rules, so the game uses illustrative curves.</li></ul>` };
-  function proof(t) { $("#proofBody").innerHTML = tabs[t](); $$("#proofTabs .pill").forEach(b => b.classList.toggle("on", b.dataset.t === t));
-    $$("[data-copy]").forEach(b => b.onclick = () => { navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied ✓"; setTimeout(() => b.textContent = "Copy", 1400); });
-    if (t === "logs") { let li = D.logs.length - 1; const view = () => { const L = D.logs[li], q = $("#logQ").value.trim().toLowerCase(), ls = L.text.split("\n").filter(l => l && (!q || l.toLowerCase().includes(q)));
-        $("#logMeta").textContent = `${L.file} · ran: ${L.done || L.plan} · showing ${ls.length} line${ls.length === 1 ? "" : "s"}`; $("#logView").innerHTML = ls.map(paint).join("\n").replace(q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi") : /$^/, m => `<mark>${m}</mark>`); };
-      $$("#logPick .pill").forEach(b => b.onclick = () => { li = +b.dataset.i; $$("#logPick .pill").forEach(x => x.classList.toggle("on", x === b)); view(); }); $("#logQ").oninput = view; view(); } }
-  $$("#proofTabs .pill").forEach(b => b.onclick = () => proof(b.dataset.t)); proof("logs");
+  /* reproducibility */
+  const cmd = (c) => `<div class="copy"><pre class="log" style="margin-top:6px">${esc(c)}</pre><button class="btn sm" data-copy="${esc(c)}">Copy</button></div>`;
+  const tabs = { logs: () => `<div class="seg" id="logPick">${D.logs.map((l, i) => `<button class="${i === D.logs.length - 1 ? "on" : ""}" data-i="${i}">${l.start.slice(0, 16)}</button>`).join("")}</div>
+      <p style="margin:12px 0 6px"><input class="q" id="logQ" placeholder="Filter log lines, for example xgboost or F1="></p><p class="note" id="logMeta"></p><pre class="log" id="logView"></pre>`,
+    env: () => `<div class="kv"><b>Python</b><span class="mono">${D.python || "–"}</span><b>Platform</b><span class="mono">${D.platform || "–"}</span>${Object.entries(D.libraries).map(([k, v]) => `<b>${k}</b><span class="mono">${v}</span>`).join("")}
+      <b>Random seed</b><span class="mono">${D.seed}</span><b>Split mode</b><span class="mono">${D.split_mode}</span><b>Readings used</b><span>${D.dataset.n_rows.toLocaleString()}${D.dataset.sample_fraction ? ` (${pct(D.dataset.sample_fraction, 0)} sample)` : " (all labelled rows)"}</span><b>Results published</b><span>${D.published}</span></div>`,
+    cmd: () => `<p>Everything on Windows, after placing a Kaggle token:</p>${cmd(".\\run.bat")}<p style="margin-top:14px">Any platform:</p>${cmd("python -m venv .venv\n.venv/bin/pip install -r requirements.txt\n.venv/bin/python -m src.main --stage all")}<p style="margin-top:14px">Five-percent trial run, a single model and split, and the tests:</p>${cmd("python -m src.main --stage all --sample 0.05\npython -m src.main --stage train_eval --models xgboost --splits split_80_20\npython -m pytest")}`,
+    notes: () => `<ul class="lim"><li><b>Split type.</b> Splits are random and stratified, so readings from the same building appear in both portions. A by-building split and a temporal split are available in the configuration.</li>
+      <li><b>Search budget.</b> Tuning is a random search with a fixed number of candidates per model. Random Forest, Isolation Forest and XGBoost are tuned on a subsample of the training portion; the Decision Tree on the full training portion.</li>
+      <li><b>Typical-level features.</b> The typical-consumption columns ship with the dataset and were computed over the full year; the six deviation features are differences against them. Labels are not involved.</li>
+      <li><b>Isolation Forest and labels.</b> It is fitted without labels; labels set its contamination rate and selected its configuration.</li>
+      <li><b>Seed.</b> All runs use seed ${D.seed}.</li><li><b>Data on this page.</b> No dataset rows are published here; the curves above are schematic.</li></ul>` };
+  function proof(t) { $("#proofBody").innerHTML = tabs[t](); $$("#proofTabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+    $$("[data-copy]").forEach(b => b.onclick = () => { navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1400); });
+    if (t === "logs") { let li = D.logs.length - 1; const view = () => { const Lg = D.logs[li], q = $("#logQ").value.trim().toLowerCase(), ls = Lg.text.split("\n").filter(l => l && (!q || l.toLowerCase().includes(q)));
+        $("#logMeta").textContent = `${Lg.file} · ${Lg.done || Lg.plan} · ${ls.length} line${ls.length === 1 ? "" : "s"} shown`; let html = ls.map(paint).join("\n");
+        if (q) html = html.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?![^<]*>)`, "gi"), "<mark>$1</mark>"); $("#logView").innerHTML = html; };
+      $$("#logPick button").forEach(b => b.onclick = () => { li = +b.dataset.i; $$("#logPick button").forEach(x => x.classList.toggle("on", x === b)); view(); }); $("#logQ").oninput = view; view(); } }
+  $$("#proofTabs button").forEach(b => b.onclick = () => proof(b.dataset.t)); proof("logs");
 
-  /* quiz */
-  const Q = [["Why is accuracy a poor score here?", ["Because the computer is slow", "Because almost every reading is normal, so saying \"normal\" every time already scores about 98%", "Because the data has too many buildings"], 1],
-    ["Which model never sees the answers while learning?", ["XGBoost", "Random Forest", "Isolation Forest"], 2], [`Which model had the best F1 on the ${splitLbl(big)} split?`, models.map(name), models.indexOf(best)]];
-  let right = 0, answered = 0; $("#quizBox").innerHTML = Q.map((q, i) => `<div class="card reveal"><h3>${i + 1}. ${q[0]}</h3>${q[1].map((o, j) => `<button class="opt" data-q="${i}" data-j="${j}">${o}</button>`).join("")}<p class="fb" style="font-weight:800;min-height:1.6em"></p></div>`).join("");
-  $$("#quizBox .reveal").forEach(e => io.observe(e));
-  $$(".opt").forEach(b => b.onclick = () => { const q = Q[+b.dataset.q], card = b.closest(".card"); if (card.dataset.done) return; card.dataset.done = 1; answered++; const ok = +b.dataset.j === q[2];
-    b.classList.add(ok ? "right" : "wrong"); $$(".opt", card)[q[2]].classList.add("right"); card.querySelector(".fb").textContent = ok ? "✅ Correct!" : "❌ Not this time."; if (ok) right++;
-    if (answered === Q.length) { if (right === Q.length) confetti(120); $("#quizBox").insertAdjacentHTML("afterend", `<p class="lead" style="margin-top:18px;font-weight:800">${right} of ${Q.length} ${right === Q.length ? "🎉 You are a certified anomaly detective!" : "· scroll back up and try the sections again!"}</p>`); } });
-
-  $("#pubLine").textContent = `Results published ${D.published} · ${D.results.length} runs · built automatically from the repository's results folder.`;
+  const bib = `@misc{das${D.published.slice(0, 4)}energyanomaly,\n  author = {Das, Sudipta Kumar},\n  title  = {Energy Anomaly Detection: Model x Split Benchmark},\n  year   = {${D.published.slice(0, 4)}},\n  url    = {https://github.com/the-sudipta/energy_anomaly_detection_model_comparison_pipeline}\n}`;
+  $("#bib").textContent = bib; $("#bibCopy").onclick = (e) => { navigator.clipboard.writeText(bib); e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1400); };
+  $("#pubLine").textContent = `Results published ${D.published} · ${D.results.length} runs · this page is rebuilt automatically from the repository's results folder.`;
 }
 </script>
 </body>

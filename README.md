@@ -45,10 +45,13 @@ python -m venv .venv
 
 **Live page:** https://the-sudipta.github.io/energy_anomaly_detection_model_comparison_pipeline/
 
-An interactive, plain-language tour of the project: a "spot the anomaly" game,
-the accuracy trap, the pipeline with its real log lines, the leaderboard, the
-tuning story, every figure and the proof (logs, versions, commands). A switch
-changes the explanations between kid, student and expert level.
+An interactive project page built from the published results: a summary
+computed from the result tables, the task and dataset, the evaluation protocol
+with a live confusion matrix, the pipeline with its real log lines, the four
+models and their selected hyperparameters, the results (ranking, heatmap,
+training-share chart, sortable table), before/after tuning with the full search
+trace, every figure, and the logs, environment and commands needed to
+reproduce the numbers.
 
 The page updates itself:
 
