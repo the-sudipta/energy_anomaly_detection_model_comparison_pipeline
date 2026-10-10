@@ -1,0 +1,24 @@
+2026-10-10 10:20:03,874 | INFO    | energy_anomaly | Plan: stages=tune,train_eval,aggregate,visualize,report models=decision_tree splits=split_30_70,split_40_60,split_50_50,split_60_40,split_80_20
+2026-10-10 10:20:03,891 | INFO    | energy_anomaly.timer | Started: tune
+2026-10-10 10:20:06,477 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-10 10:42:53,805 | INFO    | energy_anomaly.stages | [tune split_60_40 | decision_tree] best CV F1 0.8378 (defaults 0.7620): {'min_samples_leaf': 1, 'max_depth': None, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-10 10:52:41,328 | INFO    | energy_anomaly.stages | [tune split_80_20 | decision_tree] best CV F1 0.8542 (defaults 0.7722): {'min_samples_leaf': 1, 'max_depth': 30, 'criterion': 'entropy', 'class_weight': None}
+2026-10-10 10:52:41,346 | INFO    | energy_anomaly.timer | Finished: tune in 32m 37s
+2026-10-10 10:52:41,348 | INFO    | energy_anomaly.timer | Started: train_eval
+2026-10-10 10:52:42,312 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-10 10:53:09,071 | INFO    | energy_anomaly.runner | [split_30_70 | decision_tree] F1=0.811 PR-AUC=0.662 MCC=0.807 fit=19.1s
+2026-10-10 10:53:42,653 | INFO    | energy_anomaly.runner | [split_40_60 | decision_tree] F1=0.822 PR-AUC=0.679 MCC=0.818 fit=25.6s
+2026-10-10 10:54:24,935 | INFO    | energy_anomaly.runner | [split_50_50 | decision_tree] F1=0.847 PR-AUC=0.722 MCC=0.844 fit=32.5s
+2026-10-10 10:55:15,669 | INFO    | energy_anomaly.runner | [split_60_40 | decision_tree] F1=0.843 PR-AUC=0.714 MCC=0.839 fit=39.6s
+2026-10-10 10:56:28,477 | INFO    | energy_anomaly.runner | [split_80_20 | decision_tree] F1=0.879 PR-AUC=0.777 MCC=0.877 fit=58.4s
+2026-10-10 10:56:28,491 | INFO    | energy_anomaly.timer | Finished: train_eval in 3m 47s
+2026-10-10 10:56:28,493 | INFO    | energy_anomaly.timer | Started: aggregate
+2026-10-10 10:56:30,287 | INFO    | energy_anomaly.export | Wrote 17 tables to .\outputs\tables (CSV, XLSX, HTML, Markdown)
+2026-10-10 10:56:30,334 | INFO    | energy_anomaly.timer | Finished: aggregate in 1.8s
+2026-10-10 10:56:30,335 | INFO    | energy_anomaly.timer | Started: visualize
+2026-10-10 10:57:11,286 | INFO    | energy_anomaly.stages | Saved 27 figure files to .\outputs\figures
+2026-10-10 10:57:11,287 | INFO    | energy_anomaly.timer | Finished: visualize in 41.0s
+2026-10-10 10:57:11,287 | INFO    | energy_anomaly.timer | Started: report
+2026-10-10 10:57:12,568 | INFO    | energy_anomaly.stages | Report written to .\outputs\REPORT.html (2.7 MB)
+2026-10-10 10:57:12,569 | INFO    | energy_anomaly.timer | Finished: report in 1.3s
+2026-10-10 10:57:12,570 | INFO    | energy_anomaly | Done: tune, train_eval, aggregate, visualize, report in 37m 09s

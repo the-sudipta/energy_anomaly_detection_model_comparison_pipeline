@@ -1,5 +1,5 @@
 {
-  "published": "2026-10-10 10:31",
+  "published": "2026-10-10 10:57",
   "dataset": {
     "n_rows": 1749494,
     "n_anomalies": 37296,
@@ -292,6 +292,13 @@
       "start": "2026-10-09 19:09:01",
       "done": "tune, train_eval, aggregate, visualize, report in 24m 29s",
       "lines": 26
+    },
+    {
+      "file": "pipeline_20261010_102003.log",
+      "plan": "stages=tune,train_eval,aggregate,visualize,report models=decision_tree splits=split_30_70,split_40_60,split_50_50,split_60_40,split_80_20",
+      "start": "2026-10-10 10:20:03",
+      "done": "tune, train_eval, aggregate, visualize, report in 37m 09s",
+      "lines": 24
     }
   ],
   "stage_timings": {
@@ -299,9 +306,9 @@
     "preprocess": "1m 08s",
     "split": "29.7s",
     "train_eval": "62m 16s",
-    "aggregate": "1.4s",
+    "aggregate": "1.8s",
     "visualize": "48.7s",
-    "report": "0.7s",
+    "report": "1.3s",
     "tune": "150m 41s"
   }
 }
