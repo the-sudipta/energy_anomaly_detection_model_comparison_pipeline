@@ -1,0 +1,74 @@
+2026-10-09 15:33:15,304 | INFO    | energy_anomaly.timer | Started: download
+2026-10-09 15:33:15,317 | INFO    | energy_anomaly.timer | Finished: download in 0.0s
+2026-10-09 15:33:15,317 | INFO    | energy_anomaly.timer | Started: preprocess
+2026-10-09 15:33:16,465 | INFO    | energy_anomaly.load | Loaded train.csv: 1,749,494 rows, columns=['building_id', 'timestamp', 'meter_reading', 'anomaly']
+2026-10-09 15:33:32,475 | INFO    | energy_anomaly.load | Loaded train_features.csv: 1,749,494 rows, columns=['building_id', 'timestamp', 'meter_reading', 'anomaly', 'site_id', 'primary_use', 'square_feet', 'year_built', 'floor_count', 'air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth_1_hr', 'sea_level_pressure', 'wind_direction', 'wind_speed', 'air_temperature_mean_lag7', 'air_temperature_max_lag7', 'air_temperature_min_lag7', 'air_temperature_std_lag7', 'air_temperature_mean_lag73', 'air_temperature_max_lag73', 'air_temperature_min_lag73', 'air_temperature_std_lag73', 'hour', 'weekday', 'month', 'year', 'weekday_hour', 'hour_x', 'hour_y', 'month_x', 'month_y', 'weekday_x', 'weekday_y', 'building_weekday_hour', 'building_weekday', 'building_month', 'building_hour', 'building_meter', 'is_holiday', 'gte_hour', 'gte_weekday', 'gte_month', 'gte_building_id', 'gte_primary_use', 'gte_site_id', 'gte_meter', 'gte_meter_hour', 'gte_meter_weekday', 'gte_meter_month', 'gte_meter_building_id', 'gte_meter_primary_use', 'gte_meter_site_id', 'gte_meter_building_id_hour', 'gte_meter_building_id_weekday', 'gte_meter_building_id_month']
+2026-10-09 15:33:33,313 | INFO    | energy_anomaly.preprocess | Merged train_features.csv (+53 columns, dropped duplicates ['meter_reading', 'anomaly']): 1,749,494 -> 1,749,494 rows
+2026-10-09 15:33:33,860 | INFO    | energy_anomaly.preprocess | Dropping configured columns ['building_weekday_hour', 'building_weekday', 'building_month', 'building_hour', 'building_meter', 'weekday_hour'] and constant columns ['year', 'gte_meter']
+2026-10-09 15:33:34,399 | INFO    | energy_anomaly.preprocess | Added building-context deviation features: ['dev_building_hour', 'dev_building_weekday', 'dev_building_month', 'dev_building', 'dev_abs_max', 'is_zero_reading']
+2026-10-09 15:33:34,776 | INFO    | energy_anomaly.preprocess | Encoded categorical columns as integer codes: ['primary_use']
+2026-10-09 15:33:34,787 | INFO    | energy_anomaly.preprocess | Processed dataset: 1,749,494 rows, 60 features, ~374 MB in memory
+2026-10-09 15:33:38,450 | INFO    | energy_anomaly.timer | Finished: preprocess in 23.1s
+2026-10-09 15:33:38,453 | INFO    | energy_anomaly.timer | Started: split
+2026-10-09 15:33:39,889 | INFO    | energy_anomaly.splitter | split_30_70: train=524,848 (11,189 anomalies, 2.13%) | test=1,224,646 (26,107 anomalies, 2.13%)
+2026-10-09 15:33:40,936 | INFO    | energy_anomaly.splitter | split_40_60: train=699,797 (14,918 anomalies, 2.13%) | test=1,049,697 (22,378 anomalies, 2.13%)
+2026-10-09 15:33:42,023 | INFO    | energy_anomaly.splitter | split_50_50: train=874,747 (18,648 anomalies, 2.13%) | test=874,747 (18,648 anomalies, 2.13%)
+2026-10-09 15:33:42,844 | INFO    | energy_anomaly.splitter | split_60_40: train=1,049,696 (22,378 anomalies, 2.13%) | test=699,798 (14,918 anomalies, 2.13%)
+2026-10-09 15:33:43,830 | INFO    | energy_anomaly.splitter | split_80_20: train=1,399,595 (29,837 anomalies, 2.13%) | test=349,899 (7,459 anomalies, 2.13%)
+2026-10-09 15:33:43,865 | INFO    | energy_anomaly.timer | Finished: split in 5.4s
+2026-10-09 15:33:43,866 | INFO    | energy_anomaly.timer | Started: tune
+2026-10-09 15:33:44,143 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-09 15:40:59,072 | INFO    | energy_anomaly.stages | [tune split_30_70 | random_forest] best CV PR-AUC 0.8117 (defaults 0.8111): {'min_samples_leaf': 1, 'max_features': 'sqrt', 'max_depth': None, 'class_weight': 'balanced_subsample'}
+2026-10-09 15:47:52,252 | INFO    | energy_anomaly.stages | [tune split_30_70 | isolation_forest] best CV PR-AUC 0.4797 (defaults 0.1383): {'n_estimators': 300, 'max_samples': 1024, 'max_features': 1.0, 'feature_set': 'contextual'}
+2026-10-09 15:53:05,683 | INFO    | energy_anomaly.stages | [tune split_30_70 | decision_tree] best CV PR-AUC 0.7007 (defaults 0.6195): {'min_samples_leaf': 20, 'max_depth': 30, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-09 15:59:29,872 | INFO    | energy_anomaly.stages | [tune split_30_70 | xgboost] best CV PR-AUC 0.8478 (defaults 0.8375): {'subsample': 1.0, 'pos_weight_mode': 'sqrt', 'n_estimators': 1000, 'min_child_weight': 1, 'max_depth': 12, 'learning_rate': 0.03, 'colsample_bytree': 0.8}
+2026-10-09 16:08:46,305 | INFO    | energy_anomaly.stages | [tune split_40_60 | random_forest] best CV PR-AUC 0.8153 (defaults 0.8153): defaults
+2026-10-09 16:16:25,198 | INFO    | energy_anomaly.stages | [tune split_40_60 | isolation_forest] best CV PR-AUC 0.4843 (defaults 0.1273): {'n_estimators': 300, 'max_samples': 1024, 'max_features': 1.0, 'feature_set': 'contextual'}
+2026-10-09 16:21:33,682 | INFO    | energy_anomaly.stages | [tune split_40_60 | decision_tree] best CV PR-AUC 0.7211 (defaults 0.6493): {'min_samples_leaf': 20, 'max_depth': 30, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-09 16:31:03,740 | INFO    | energy_anomaly.stages | [tune split_40_60 | xgboost] best CV PR-AUC 0.8562 (defaults 0.8476): {'subsample': 1.0, 'pos_weight_mode': 'sqrt', 'n_estimators': 1000, 'min_child_weight': 1, 'max_depth': 12, 'learning_rate': 0.03, 'colsample_bytree': 0.8}
+2026-10-09 16:41:40,283 | INFO    | energy_anomaly.stages | [tune split_50_50 | random_forest] best CV PR-AUC 0.8070 (defaults 0.8070): defaults
+2026-10-09 16:49:37,412 | INFO    | energy_anomaly.stages | [tune split_50_50 | isolation_forest] best CV PR-AUC 0.4823 (defaults 0.1195): {'n_estimators': 300, 'max_samples': 1024, 'max_features': 1.0, 'feature_set': 'contextual'}
+2026-10-09 16:53:51,881 | INFO    | energy_anomaly.stages | [tune split_50_50 | decision_tree] best CV PR-AUC 0.7019 (defaults 0.6337): {'min_samples_leaf': 20, 'max_depth': 30, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-09 17:03:31,898 | INFO    | energy_anomaly.stages | [tune split_50_50 | xgboost] best CV PR-AUC 0.8508 (defaults 0.8400): {'subsample': 1.0, 'pos_weight_mode': 'sqrt', 'n_estimators': 1000, 'min_child_weight': 1, 'max_depth': 12, 'learning_rate': 0.03, 'colsample_bytree': 0.8}
+2026-10-09 17:10:45,528 | INFO    | energy_anomaly.stages | [tune split_60_40 | random_forest] best CV PR-AUC 0.8251 (defaults 0.8251): defaults
+2026-10-09 17:16:12,725 | INFO    | energy_anomaly.stages | [tune split_60_40 | isolation_forest] best CV PR-AUC 0.4941 (defaults 0.1242): {'n_estimators': 300, 'max_samples': 1024, 'max_features': 1.0, 'feature_set': 'contextual'}
+2026-10-09 17:19:45,234 | INFO    | energy_anomaly.stages | [tune split_60_40 | decision_tree] best CV PR-AUC 0.7105 (defaults 0.6420): {'min_samples_leaf': 20, 'max_depth': 30, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-09 17:28:20,881 | INFO    | energy_anomaly.stages | [tune split_60_40 | xgboost] best CV PR-AUC 0.8548 (defaults 0.8477): {'subsample': 1.0, 'pos_weight_mode': 'sqrt', 'n_estimators': 1000, 'min_child_weight': 1, 'max_depth': 12, 'learning_rate': 0.03, 'colsample_bytree': 0.8}
+2026-10-09 17:38:45,213 | INFO    | energy_anomaly.stages | [tune split_80_20 | random_forest] best CV PR-AUC 0.8290 (defaults 0.8290): defaults
+2026-10-09 17:47:53,077 | INFO    | energy_anomaly.stages | [tune split_80_20 | isolation_forest] best CV PR-AUC 0.4844 (defaults 0.1240): {'n_estimators': 300, 'max_samples': 1024, 'max_features': 1.0, 'feature_set': 'contextual'}
+2026-10-09 17:52:59,742 | INFO    | energy_anomaly.stages | [tune split_80_20 | decision_tree] best CV PR-AUC 0.7076 (defaults 0.6513): {'min_samples_leaf': 20, 'max_depth': 30, 'criterion': 'gini', 'class_weight': 'balanced'}
+2026-10-09 18:04:24,606 | INFO    | energy_anomaly.stages | [tune split_80_20 | xgboost] best CV PR-AUC 0.8553 (defaults 0.8455): {'subsample': 1.0, 'pos_weight_mode': 'sqrt', 'n_estimators': 1000, 'min_child_weight': 1, 'max_depth': 12, 'learning_rate': 0.03, 'colsample_bytree': 0.8}
+2026-10-09 18:04:24,617 | INFO    | energy_anomaly.timer | Finished: tune in 150m 41s
+2026-10-09 18:04:24,620 | INFO    | energy_anomaly.timer | Started: train_eval
+2026-10-09 18:04:25,515 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-09 18:08:25,608 | INFO    | energy_anomaly.runner | [split_30_70 | random_forest] F1=0.850 PR-AUC=0.939 MCC=0.856 fit=199.1s
+2026-10-09 18:09:35,512 | INFO    | energy_anomaly.runner | [split_30_70 | isolation_forest] F1=0.458 PR-AUC=0.479 MCC=0.446 fit=11.6s
+2026-10-09 18:10:07,964 | INFO    | energy_anomaly.runner | [split_30_70 | decision_tree] F1=0.499 PR-AUC=0.813 MCC=0.538 fit=24.2s
+2026-10-09 18:12:40,597 | INFO    | energy_anomaly.runner | [split_30_70 | xgboost] F1=0.895 PR-AUC=0.939 MCC=0.896 fit=116.8s
+2026-10-09 18:17:54,671 | INFO    | energy_anomaly.runner | [split_40_60 | random_forest] F1=0.878 PR-AUC=0.948 MCC=0.880 fit=273.9s
+2026-10-09 18:19:06,147 | INFO    | energy_anomaly.runner | [split_40_60 | isolation_forest] F1=0.457 PR-AUC=0.481 MCC=0.445 fit=14.3s
+2026-10-09 18:19:47,890 | INFO    | energy_anomaly.runner | [split_40_60 | decision_tree] F1=0.522 PR-AUC=0.837 MCC=0.560 fit=32.1s
+2026-10-09 18:22:39,266 | INFO    | energy_anomaly.runner | [split_40_60 | xgboost] F1=0.908 PR-AUC=0.949 MCC=0.908 fit=136.5s
+2026-10-09 18:29:14,670 | INFO    | energy_anomaly.runner | [split_50_50 | random_forest] F1=0.889 PR-AUC=0.955 MCC=0.891 fit=354.1s
+2026-10-09 18:30:27,486 | INFO    | energy_anomaly.runner | [split_50_50 | isolation_forest] F1=0.460 PR-AUC=0.482 MCC=0.448 fit=17.7s
+2026-10-09 18:31:18,929 | INFO    | energy_anomaly.runner | [split_50_50 | decision_tree] F1=0.540 PR-AUC=0.849 MCC=0.577 fit=39.6s
+2026-10-09 18:34:28,270 | INFO    | energy_anomaly.runner | [split_50_50 | xgboost] F1=0.915 PR-AUC=0.956 MCC=0.914 fit=153.6s
+2026-10-09 18:42:37,223 | INFO    | energy_anomaly.runner | [split_60_40 | random_forest] F1=0.899 PR-AUC=0.960 MCC=0.899 fit=446.8s
+2026-10-09 18:43:51,823 | INFO    | energy_anomaly.runner | [split_60_40 | isolation_forest] F1=0.456 PR-AUC=0.478 MCC=0.445 fit=20.2s
+2026-10-09 18:44:53,588 | INFO    | energy_anomaly.runner | [split_60_40 | decision_tree] F1=0.563 PR-AUC=0.856 MCC=0.596 fit=49.0s
+2026-10-09 18:48:25,158 | INFO    | energy_anomaly.runner | [split_60_40 | xgboost] F1=0.919 PR-AUC=0.961 MCC=0.919 fit=173.0s
+2026-10-09 18:59:38,474 | INFO    | energy_anomaly.runner | [split_80_20 | random_forest] F1=0.909 PR-AUC=0.968 MCC=0.909 fit=628.1s
+2026-10-09 19:00:59,891 | INFO    | energy_anomaly.runner | [split_80_20 | isolation_forest] F1=0.460 PR-AUC=0.482 MCC=0.449 fit=26.4s
+2026-10-09 19:02:23,506 | INFO    | energy_anomaly.runner | [split_80_20 | decision_tree] F1=0.598 PR-AUC=0.879 MCC=0.628 fit=67.1s
+2026-10-09 19:06:40,211 | INFO    | energy_anomaly.runner | [split_80_20 | xgboost] F1=0.930 PR-AUC=0.970 MCC=0.929 fit=216.4s
+2026-10-09 19:06:40,234 | INFO    | energy_anomaly.timer | Finished: train_eval in 62m 16s
+2026-10-09 19:06:40,238 | INFO    | energy_anomaly.timer | Started: aggregate
+2026-10-09 19:06:41,625 | INFO    | energy_anomaly.export | Wrote 17 tables to .\outputs\tables (CSV, XLSX, HTML, Markdown)
+2026-10-09 19:06:41,677 | INFO    | energy_anomaly.timer | Finished: aggregate in 1.4s
+2026-10-09 19:06:41,678 | INFO    | energy_anomaly.timer | Started: visualize
+2026-10-09 19:07:30,414 | INFO    | energy_anomaly.stages | Saved 27 figure files to .\outputs\figures
+2026-10-09 19:07:30,415 | INFO    | energy_anomaly.timer | Finished: visualize in 48.7s
+2026-10-09 19:07:30,416 | INFO    | energy_anomaly.timer | Started: report
+2026-10-09 19:07:31,047 | INFO    | energy_anomaly.stages | Report written to .\outputs\REPORT.html (2.9 MB)
+2026-10-09 19:07:31,049 | INFO    | energy_anomaly.timer | Finished: report in 0.6s
+2026-10-09 19:07:31,050 | INFO    | energy_anomaly | Done: download, preprocess, split, tune, train_eval, aggregate, visualize, report in 214m 16s

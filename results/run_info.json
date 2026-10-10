@@ -1,0 +1,307 @@
+{
+  "published": "2026-10-10 10:31",
+  "dataset": {
+    "n_rows": 1749494,
+    "n_anomalies": 37296,
+    "anomaly_rate": 0.02131816399484651,
+    "n_features": 60,
+    "feature_columns": [
+      "meter_reading",
+      "site_id",
+      "square_feet",
+      "year_built",
+      "floor_count",
+      "air_temperature",
+      "cloud_coverage",
+      "dew_temperature",
+      "precip_depth_1_hr",
+      "sea_level_pressure",
+      "wind_direction",
+      "wind_speed",
+      "air_temperature_mean_lag7",
+      "air_temperature_max_lag7",
+      "air_temperature_min_lag7",
+      "air_temperature_std_lag7",
+      "air_temperature_mean_lag73",
+      "air_temperature_max_lag73",
+      "air_temperature_min_lag73",
+      "air_temperature_std_lag73",
+      "hour",
+      "weekday",
+      "month",
+      "hour_x",
+      "hour_y",
+      "month_x",
+      "month_y",
+      "weekday_x",
+      "weekday_y",
+      "is_holiday",
+      "gte_hour",
+      "gte_weekday",
+      "gte_month",
+      "gte_building_id",
+      "gte_primary_use",
+      "gte_site_id",
+      "gte_meter_hour",
+      "gte_meter_weekday",
+      "gte_meter_month",
+      "gte_meter_building_id",
+      "gte_meter_primary_use",
+      "gte_meter_site_id",
+      "gte_meter_building_id_hour",
+      "gte_meter_building_id_weekday",
+      "gte_meter_building_id_month",
+      "day_of_week",
+      "day_of_year",
+      "is_weekend",
+      "hour_sin",
+      "hour_cos",
+      "dow_sin",
+      "dow_cos",
+      "log_meter_reading",
+      "dev_building_hour",
+      "dev_building_weekday",
+      "dev_building_month",
+      "dev_building",
+      "dev_abs_max",
+      "is_zero_reading",
+      "primary_use_code"
+    ],
+    "sample_fraction": null
+  },
+  "python": "3.14.7",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "libraries": {
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "scikit-learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "matplotlib": "3.11.2",
+    "seaborn": "0.13.2"
+  },
+  "seed": 42,
+  "split_mode": "stratified_random",
+  "split_ratios": {
+    "split_30_70": 0.3,
+    "split_40_60": 0.4,
+    "split_50_50": 0.5,
+    "split_60_40": 0.6,
+    "split_80_20": 0.8
+  },
+  "models": {
+    "random_forest": {
+      "n_estimators": 300,
+      "class_weight": "balanced_subsample",
+      "min_samples_leaf": 2
+    },
+    "isolation_forest": {
+      "n_estimators": 300,
+      "contamination": "train_rate",
+      "fit_on_normal_only": false,
+      "feature_set": "all"
+    },
+    "decision_tree": {
+      "max_depth": null,
+      "min_samples_leaf": 5,
+      "class_weight": "balanced"
+    },
+    "xgboost": {
+      "n_estimators": 400,
+      "learning_rate": 0.08,
+      "max_depth": 8,
+      "subsample": 0.8,
+      "colsample_bytree": 0.8,
+      "tree_method": "hist",
+      "eval_metric": "aucpr"
+    }
+  },
+  "display_names": {
+    "random_forest": "Random Forest",
+    "isolation_forest": "Isolation Forest",
+    "decision_tree": "Decision Tree",
+    "xgboost": "XGBoost"
+  },
+  "palette": {
+    "random_forest": "#1F6F78",
+    "isolation_forest": "#7D4E77",
+    "decision_tree": "#D9822B",
+    "xgboost": "#4A6FA5"
+  },
+  "tuning": {
+    "enabled": true,
+    "folds": 3,
+    "objective": {
+      "decision_tree": "f1"
+    },
+    "sample_size": {
+      "random_forest": 100000,
+      "isolation_forest": 200000,
+      "decision_tree": null,
+      "xgboost": 150000
+    },
+    "folds_per_model": {
+      "decision_tree": 1
+    },
+    "n_iter": {
+      "random_forest": 8,
+      "isolation_forest": 12,
+      "decision_tree": 8,
+      "xgboost": 10
+    },
+    "spaces": {
+      "random_forest": {
+        "max_depth": [
+          null,
+          20,
+          30
+        ],
+        "min_samples_leaf": [
+          1,
+          2,
+          5,
+          10
+        ],
+        "max_features": [
+          "sqrt",
+          0.3,
+          0.5
+        ],
+        "class_weight": [
+          "balanced_subsample",
+          null
+        ]
+      },
+      "isolation_forest": {
+        "n_estimators": [
+          200,
+          300,
+          500
+        ],
+        "max_samples": [
+          256,
+          1024,
+          4096
+        ],
+        "max_features": [
+          0.5,
+          0.75,
+          1.0
+        ],
+        "feature_set": [
+          "all",
+          "contextual"
+        ]
+      },
+      "decision_tree": {
+        "max_depth": [
+          null,
+          20,
+          30,
+          40
+        ],
+        "min_samples_leaf": [
+          1,
+          5,
+          10,
+          20,
+          50
+        ],
+        "criterion": [
+          "gini",
+          "entropy"
+        ],
+        "class_weight": [
+          "balanced",
+          null
+        ]
+      },
+      "xgboost": {
+        "n_estimators": [
+          300,
+          600,
+          1000
+        ],
+        "learning_rate": [
+          0.03,
+          0.05,
+          0.1
+        ],
+        "max_depth": [
+          6,
+          8,
+          10,
+          12
+        ],
+        "subsample": [
+          0.7,
+          0.8,
+          1.0
+        ],
+        "colsample_bytree": [
+          0.6,
+          0.8,
+          1.0
+        ],
+        "min_child_weight": [
+          1,
+          5,
+          10
+        ],
+        "pos_weight_mode": [
+          "ratio",
+          "sqrt",
+          "none"
+        ]
+      }
+    }
+  },
+  "figures": [
+    "00_dashboard.webp",
+    "01_metric_heatmaps.webp",
+    "02_grouped_metric_bars.webp",
+    "03_train_size_lines.webp",
+    "04_radar_profiles.webp",
+    "05_roc_grid.webp",
+    "06_pr_grid.webp",
+    "07_curve_overlay.webp",
+    "08_confusion_grid.webp",
+    "09_feature_importance_grid.webp",
+    "10_efficiency.webp",
+    "11_score_distributions.webp",
+    "12_rank_bump_chart.webp"
+  ],
+  "logs": [
+    {
+      "file": "pipeline_20261009_132749.log",
+      "plan": "full pipeline",
+      "start": "2026-10-09 13:27:49",
+      "done": "download, preprocess, split, train_eval, aggregate, visualize, report in 47m 20s",
+      "lines": 50
+    },
+    {
+      "file": "pipeline_20261009_153315.log",
+      "plan": "full pipeline",
+      "start": "2026-10-09 15:33:15",
+      "done": "download, preprocess, split, tune, train_eval, aggregate, visualize, report in 214m 16s",
+      "lines": 74
+    },
+    {
+      "file": "pipeline_20261009_190901.log",
+      "plan": "full pipeline",
+      "start": "2026-10-09 19:09:01",
+      "done": "tune, train_eval, aggregate, visualize, report in 24m 29s",
+      "lines": 26
+    }
+  ],
+  "stage_timings": {
+    "download": "0.0s",
+    "preprocess": "1m 08s",
+    "split": "29.7s",
+    "train_eval": "62m 16s",
+    "aggregate": "1.4s",
+    "visualize": "48.7s",
+    "report": "0.7s",
+    "tune": "150m 41s"
+  }
+}

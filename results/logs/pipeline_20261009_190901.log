@@ -1,0 +1,26 @@
+2026-10-09 19:09:01,257 | INFO    | energy_anomaly.timer | Started: tune
+2026-10-09 19:09:01,557 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-09 19:13:39,256 | INFO    | energy_anomaly.stages | [tune split_30_70 | decision_tree] best CV F1 0.7166 (defaults 0.5764): {'min_samples_leaf': 1, 'max_depth': 20, 'criterion': 'entropy', 'class_weight': None}
+2026-10-09 19:18:10,746 | INFO    | energy_anomaly.stages | [tune split_40_60 | decision_tree] best CV F1 0.7387 (defaults 0.6062): {'min_samples_leaf': 1, 'max_depth': 10, 'criterion': 'entropy', 'class_weight': None}
+2026-10-09 19:22:04,458 | INFO    | energy_anomaly.stages | [tune split_50_50 | decision_tree] best CV F1 0.7298 (defaults 0.5793): {'min_samples_leaf': 1, 'max_depth': 10, 'criterion': 'entropy', 'class_weight': None}
+2026-10-09 19:25:58,943 | INFO    | energy_anomaly.stages | [tune split_60_40 | decision_tree] best CV F1 0.7422 (defaults 0.5968): {'min_samples_leaf': 1, 'max_depth': 10, 'criterion': 'entropy', 'class_weight': None}
+2026-10-09 19:29:47,460 | INFO    | energy_anomaly.stages | [tune split_80_20 | decision_tree] best CV F1 0.7372 (defaults 0.5891): {'min_samples_leaf': 1, 'max_depth': 10, 'criterion': 'entropy', 'class_weight': None}
+2026-10-09 19:29:47,468 | INFO    | energy_anomaly.timer | Finished: tune in 20m 46s
+2026-10-09 19:29:47,470 | INFO    | energy_anomaly.timer | Started: train_eval
+2026-10-09 19:29:48,139 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 60 (~355 MB)
+2026-10-09 19:30:14,719 | INFO    | energy_anomaly.runner | [split_30_70 | decision_tree] F1=0.816 PR-AUC=0.704 MCC=0.813 fit=18.9s
+2026-10-09 19:30:40,437 | INFO    | energy_anomaly.runner | [split_40_60 | decision_tree] F1=0.758 PR-AUC=0.722 MCC=0.773 fit=16.9s
+2026-10-09 19:31:16,696 | INFO    | energy_anomaly.runner | [split_50_50 | decision_tree] F1=0.757 PR-AUC=0.718 MCC=0.772 fit=22.7s
+2026-10-09 19:31:59,407 | INFO    | energy_anomaly.runner | [split_60_40 | decision_tree] F1=0.757 PR-AUC=0.725 MCC=0.770 fit=28.1s
+2026-10-09 19:32:50,431 | INFO    | energy_anomaly.runner | [split_80_20 | decision_tree] F1=0.758 PR-AUC=0.725 MCC=0.770 fit=33.8s
+2026-10-09 19:32:50,451 | INFO    | energy_anomaly.timer | Finished: train_eval in 3m 03s
+2026-10-09 19:32:50,453 | INFO    | energy_anomaly.timer | Started: aggregate
+2026-10-09 19:32:51,311 | INFO    | energy_anomaly.export | Wrote 17 tables to .\outputs\tables (CSV, XLSX, HTML, Markdown)
+2026-10-09 19:32:51,359 | INFO    | energy_anomaly.timer | Finished: aggregate in 0.9s
+2026-10-09 19:32:51,360 | INFO    | energy_anomaly.timer | Started: visualize
+2026-10-09 19:33:29,658 | INFO    | energy_anomaly.stages | Saved 27 figure files to .\outputs\figures
+2026-10-09 19:33:29,659 | INFO    | energy_anomaly.timer | Finished: visualize in 38.3s
+2026-10-09 19:33:29,660 | INFO    | energy_anomaly.timer | Started: report
+2026-10-09 19:33:30,372 | INFO    | energy_anomaly.stages | Report written to .\outputs\REPORT.html (2.8 MB)
+2026-10-09 19:33:30,373 | INFO    | energy_anomaly.timer | Finished: report in 0.7s
+2026-10-09 19:33:30,374 | INFO    | energy_anomaly | Done: tune, train_eval, aggregate, visualize, report in 24m 29s

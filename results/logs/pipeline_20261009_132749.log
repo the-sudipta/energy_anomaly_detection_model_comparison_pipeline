@@ -1,0 +1,50 @@
+2026-10-09 13:27:49,008 | INFO    | energy_anomaly.timer | Started: download
+2026-10-09 13:27:49,020 | INFO    | energy_anomaly.timer | Finished: download in 0.0s
+2026-10-09 13:27:49,021 | INFO    | energy_anomaly.timer | Started: preprocess
+2026-10-09 13:27:50,307 | INFO    | energy_anomaly.load | Loaded train.csv: 1,749,494 rows, columns=['building_id', 'timestamp', 'meter_reading', 'anomaly']
+2026-10-09 13:28:25,092 | INFO    | energy_anomaly.load | Loaded train_features.csv: 1,749,494 rows, columns=['building_id', 'timestamp', 'meter_reading', 'anomaly', 'site_id', 'primary_use', 'square_feet', 'year_built', 'floor_count', 'air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth_1_hr', 'sea_level_pressure', 'wind_direction', 'wind_speed', 'air_temperature_mean_lag7', 'air_temperature_max_lag7', 'air_temperature_min_lag7', 'air_temperature_std_lag7', 'air_temperature_mean_lag73', 'air_temperature_max_lag73', 'air_temperature_min_lag73', 'air_temperature_std_lag73', 'hour', 'weekday', 'month', 'year', 'weekday_hour', 'hour_x', 'hour_y', 'month_x', 'month_y', 'weekday_x', 'weekday_y', 'building_weekday_hour', 'building_weekday', 'building_month', 'building_hour', 'building_meter', 'is_holiday', 'gte_hour', 'gte_weekday', 'gte_month', 'gte_building_id', 'gte_primary_use', 'gte_site_id', 'gte_meter', 'gte_meter_hour', 'gte_meter_weekday', 'gte_meter_month', 'gte_meter_building_id', 'gte_meter_primary_use', 'gte_meter_site_id', 'gte_meter_building_id_hour', 'gte_meter_building_id_weekday', 'gte_meter_building_id_month']
+2026-10-09 13:28:27,223 | INFO    | energy_anomaly.preprocess | Merged train_features.csv (+53 columns, dropped duplicates ['meter_reading', 'anomaly']): 1,749,494 -> 1,749,494 rows
+2026-10-09 13:28:33,686 | INFO    | energy_anomaly.preprocess | Dropping configured columns ['building_weekday_hour', 'building_weekday', 'building_month', 'building_hour', 'building_meter', 'weekday_hour'] and constant columns ['year', 'gte_meter']
+2026-10-09 13:28:38,233 | INFO    | energy_anomaly.preprocess | Encoded categorical columns as integer codes: ['primary_use']
+2026-10-09 13:28:38,304 | INFO    | energy_anomaly.preprocess | Processed dataset: 1,749,494 rows, 54 features, ~338 MB in memory
+2026-10-09 13:28:57,214 | INFO    | energy_anomaly.timer | Finished: preprocess in 1m 08s
+2026-10-09 13:28:57,219 | INFO    | energy_anomaly.timer | Started: split
+2026-10-09 13:29:02,978 | INFO    | energy_anomaly.splitter | split_30_70: train=524,848 (11,189 anomalies, 2.13%) | test=1,224,646 (26,107 anomalies, 2.13%)
+2026-10-09 13:29:08,570 | INFO    | energy_anomaly.splitter | split_40_60: train=699,797 (14,918 anomalies, 2.13%) | test=1,049,697 (22,378 anomalies, 2.13%)
+2026-10-09 13:29:14,366 | INFO    | energy_anomaly.splitter | split_50_50: train=874,747 (18,648 anomalies, 2.13%) | test=874,747 (18,648 anomalies, 2.13%)
+2026-10-09 13:29:19,047 | INFO    | energy_anomaly.splitter | split_60_40: train=1,049,696 (22,378 anomalies, 2.13%) | test=699,798 (14,918 anomalies, 2.13%)
+2026-10-09 13:29:26,900 | INFO    | energy_anomaly.splitter | split_80_20: train=1,399,595 (29,837 anomalies, 2.13%) | test=349,899 (7,459 anomalies, 2.13%)
+2026-10-09 13:29:26,952 | INFO    | energy_anomaly.timer | Finished: split in 29.7s
+2026-10-09 13:29:27,013 | INFO    | energy_anomaly.timer | Started: train_eval
+2026-10-09 13:29:28,818 | INFO    | energy_anomaly.stages | Feature matrix: 1,749,494 x 54 (~318 MB)
+2026-10-09 13:33:28,705 | INFO    | energy_anomaly.runner | [split_30_70 | random_forest] F1=0.857 PR-AUC=0.932 MCC=0.859 fit=191.8s
+2026-10-09 13:34:19,686 | INFO    | energy_anomaly.runner | [split_30_70 | isolation_forest] F1=0.030 PR-AUC=0.025 MCC=0.009 fit=8.0s
+2026-10-09 13:34:39,452 | INFO    | energy_anomaly.runner | [split_30_70 | decision_tree] F1=0.733 PR-AUC=0.793 MCC=0.734 fit=13.2s
+2026-10-09 13:35:07,556 | INFO    | energy_anomaly.runner | [split_30_70 | xgboost] F1=0.840 PR-AUC=0.925 MCC=0.838 fit=18.3s
+2026-10-09 13:39:34,446 | INFO    | energy_anomaly.runner | [split_40_60 | random_forest] F1=0.876 PR-AUC=0.946 MCC=0.877 fit=242.4s
+2026-10-09 13:40:26,151 | INFO    | energy_anomaly.runner | [split_40_60 | isolation_forest] F1=0.031 PR-AUC=0.025 MCC=0.010 fit=10.1s
+2026-10-09 13:40:53,656 | INFO    | energy_anomaly.runner | [split_40_60 | decision_tree] F1=0.760 PR-AUC=0.814 MCC=0.760 fit=19.4s
+2026-10-09 13:41:34,600 | INFO    | energy_anomaly.runner | [split_40_60 | xgboost] F1=0.840 PR-AUC=0.936 MCC=0.839 fit=27.6s
+2026-10-09 13:51:44,078 | INFO    | energy_anomaly.runner | [split_50_50 | random_forest] F1=0.889 PR-AUC=0.954 MCC=0.889 fit=539.8s
+2026-10-09 13:53:51,969 | INFO    | energy_anomaly.runner | [split_50_50 | isolation_forest] F1=0.028 PR-AUC=0.025 MCC=0.006 fit=21.2s
+2026-10-09 13:55:19,172 | INFO    | energy_anomaly.runner | [split_50_50 | decision_tree] F1=0.780 PR-AUC=0.837 MCC=0.780 fit=60.4s
+2026-10-09 13:56:30,074 | INFO    | energy_anomaly.runner | [split_50_50 | xgboost] F1=0.839 PR-AUC=0.944 MCC=0.840 fit=36.8s
+2026-10-09 14:02:29,726 | INFO    | energy_anomaly.runner | [split_60_40 | random_forest] F1=0.900 PR-AUC=0.960 MCC=0.900 fit=316.6s
+2026-10-09 14:03:36,966 | INFO    | energy_anomaly.runner | [split_60_40 | isolation_forest] F1=0.031 PR-AUC=0.025 MCC=0.010 fit=19.3s
+2026-10-09 14:04:19,523 | INFO    | energy_anomaly.runner | [split_60_40 | decision_tree] F1=0.798 PR-AUC=0.849 MCC=0.798 fit=30.2s
+2026-10-09 14:05:21,961 | INFO    | energy_anomaly.runner | [split_60_40 | xgboost] F1=0.830 PR-AUC=0.947 MCC=0.832 fit=46.9s
+2026-10-09 14:12:20,366 | INFO    | energy_anomaly.runner | [split_80_20 | random_forest] F1=0.910 PR-AUC=0.970 MCC=0.909 fit=382.6s
+2026-10-09 14:13:07,291 | INFO    | energy_anomaly.runner | [split_80_20 | isolation_forest] F1=0.029 PR-AUC=0.025 MCC=0.008 fit=15.9s
+2026-10-09 14:13:47,586 | INFO    | energy_anomaly.runner | [split_80_20 | decision_tree] F1=0.825 PR-AUC=0.876 MCC=0.825 fit=29.7s
+2026-10-09 14:14:35,480 | INFO    | energy_anomaly.runner | [split_80_20 | xgboost] F1=0.830 PR-AUC=0.954 MCC=0.832 fit=36.3s
+2026-10-09 14:14:35,492 | INFO    | energy_anomaly.timer | Finished: train_eval in 45m 08s
+2026-10-09 14:14:35,495 | INFO    | energy_anomaly.timer | Started: aggregate
+2026-10-09 14:14:36,389 | INFO    | energy_anomaly.export | Wrote 15 tables to .\outputs\tables (CSV, XLSX, HTML, Markdown)
+2026-10-09 14:14:36,441 | INFO    | energy_anomaly.timer | Finished: aggregate in 0.9s
+2026-10-09 14:14:36,442 | INFO    | energy_anomaly.timer | Started: visualize
+2026-10-09 14:15:08,790 | INFO    | energy_anomaly.stages | Saved 27 figure files to .\outputs\figures
+2026-10-09 14:15:08,792 | INFO    | energy_anomaly.timer | Finished: visualize in 32.3s
+2026-10-09 14:15:08,792 | INFO    | energy_anomaly.timer | Started: report
+2026-10-09 14:15:09,256 | INFO    | energy_anomaly.stages | Report written to .\outputs\REPORT.html (2.7 MB)
+2026-10-09 14:15:09,258 | INFO    | energy_anomaly.timer | Finished: report in 0.5s
+2026-10-09 14:15:09,258 | INFO    | energy_anomaly | Done: download, preprocess, split, train_eval, aggregate, visualize, report in 47m 20s
