@@ -41,6 +41,30 @@ python -m venv .venv
 .venv/bin/python -m src.main --stage all
 ```
 
+## Website
+
+**Live page:** https://the-sudipta.github.io/energy_anomaly_detection_model_comparison_pipeline/
+
+An interactive, plain-language tour of the project: a "spot the anomaly" game,
+the accuracy trap, the pipeline with its real log lines, the leaderboard, the
+tuning story, every figure and the proof (logs, versions, commands). A switch
+changes the explanations between kid, student and expert level.
+
+The page updates itself:
+
+1. `run.bat` ends by running `python -m src.publish`, which copies a small
+   snapshot (result tables, compressed figures, tuning results, run info and
+   the run logs with local paths removed) into the committed `results/` folder.
+   No raw dataset rows are published.
+2. Commit and push `results/`.
+3. The **Deploy website** GitHub Actions workflow runs
+   `python tools/build_site.py`, which turns `results/` into the page's
+   `data.json`, and deploys `index.html` to GitHub Pages.
+
+Preview locally with `python tools/build_site.py --out _site` and
+`python -m http.server --directory _site`. GitHub Pages must be set to
+**Source: GitHub Actions** (repository Settings → Pages).
+
 ## Running again: the menu
 
 When earlier results exist, `run.bat` (with no arguments) asks what to do:
@@ -159,6 +183,10 @@ src/visualization/        theme and every chart
 src/pipeline/             stages, experiment runner, report
 tests/test_smoke.py       synthetic end-to-end test (pytest)
 monitor/                  live progress page (server + 3D view)
+index.html                public website (GitHub Pages)
+results/                  published results snapshot the website is built from
+tools/build_site.py       builds the website data from results/
+.github/workflows/        website deployment and tests
 run.bat / run_stage.bat   Windows launchers
 ```
 

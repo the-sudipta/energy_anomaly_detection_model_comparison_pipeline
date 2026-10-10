@@ -47,9 +47,14 @@ start "Benchmark live monitor" /min ".venv\Scripts\python.exe" -m monitor.server
 ".venv\Scripts\python.exe" -m src.main --stage all %ARGS%
 if errorlevel 1 goto :failed
 
+rem Refresh the small results snapshot the public website is built from.
+".venv\Scripts\python.exe" -m src.publish
+
 if exist "outputs\REPORT.html" start "" "outputs\REPORT.html"
 echo.
 echo Finished. Results are in the outputs folder.
+echo To update the website, commit and push the results folder:
+echo     git add results ^&^& git commit -m "Update results" ^&^& git push
 pause
 exit /b 0
 
